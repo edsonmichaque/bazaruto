@@ -98,5 +98,3 @@ func (j *SendSMSJob) GetAttempts() int            { return j.Attempts }
 func (j *SendSMSJob) SetRunAt(t time.Time)        { j.RunAtTime = t }
 func (j *SendSMSJob) GetRunAt() time.Time         { return j.RunAtTime }
 func (j *SendSMSJob) Timeout() time.Duration      { return job.DefaultTimeout }
-
-

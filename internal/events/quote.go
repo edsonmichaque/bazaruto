@@ -71,4 +71,3 @@ func NewQuoteCalculatedEvent(quoteID, userID uuid.UUID, basePremium, finalPremiu
 	}
 	return event
 }
-

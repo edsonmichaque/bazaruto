@@ -296,19 +296,19 @@ func NewWebhookListOptions() *WebhookListOptions {
 // CustomerListOptions provides filtering options specific to customers
 type CustomerListOptions struct {
 	*ListOptions
-	UserID        *uuid.UUID `json:"user_id" form:"user_id"`
-	RiskProfile   string     `json:"risk_profile" form:"risk_profile"`
-	CustomerTier  string     `json:"customer_tier" form:"customer_tier"`
-	KYCStatus     string     `json:"kyc_status" form:"kyc_status"`
-	AMLStatus     string     `json:"aml_status" form:"aml_status"`
-	Nationality   string     `json:"nationality" form:"nationality"`
-	Occupation    string     `json:"occupation" form:"occupation"`
-	MinIncome     *float64   `json:"min_income" form:"min_income"`
-	MaxIncome     *float64   `json:"max_income" form:"max_income"`
-	MinCreditScore *int      `json:"min_credit_score" form:"min_credit_score"`
-	MaxCreditScore *int      `json:"max_credit_score" form:"max_credit_score"`
-	HasAddress    *bool      `json:"has_address" form:"has_address"`
-	HasDocuments  *bool      `json:"has_documents" form:"has_documents"`
+	UserID         *uuid.UUID `json:"user_id" form:"user_id"`
+	RiskProfile    string     `json:"risk_profile" form:"risk_profile"`
+	CustomerTier   string     `json:"customer_tier" form:"customer_tier"`
+	KYCStatus      string     `json:"kyc_status" form:"kyc_status"`
+	AMLStatus      string     `json:"aml_status" form:"aml_status"`
+	Nationality    string     `json:"nationality" form:"nationality"`
+	Occupation     string     `json:"occupation" form:"occupation"`
+	MinIncome      *float64   `json:"min_income" form:"min_income"`
+	MaxIncome      *float64   `json:"max_income" form:"max_income"`
+	MinCreditScore *int       `json:"min_credit_score" form:"min_credit_score"`
+	MaxCreditScore *int       `json:"max_credit_score" form:"max_credit_score"`
+	HasAddress     *bool      `json:"has_address" form:"has_address"`
+	HasDocuments   *bool      `json:"has_documents" form:"has_documents"`
 }
 
 // NewCustomerListOptions creates customer-specific list options
@@ -317,4 +317,3 @@ func NewCustomerListOptions() *CustomerListOptions {
 		ListOptions: DefaultListOptions(),
 	}
 }
-

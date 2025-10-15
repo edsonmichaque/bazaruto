@@ -99,4 +99,3 @@ type CustomerStore interface {
 	// GetCustomersRequiringAML retrieves customers requiring AML review.
 	GetCustomersRequiringAML(ctx context.Context, limit, offset int) ([]*models.Customer, error)
 }
-

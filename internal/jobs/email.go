@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edsonmichaque/bazaruto/pkg/job"
 	"github.com/edsonmichaque/bazaruto/internal/logger"
 	"github.com/edsonmichaque/bazaruto/internal/models"
 	"github.com/edsonmichaque/bazaruto/internal/services"
+	"github.com/edsonmichaque/bazaruto/pkg/job"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -414,5 +414,3 @@ func (j *PasswordResetJob) GetAttempts() int            { return j.Attempts }
 func (j *PasswordResetJob) SetRunAt(t time.Time)        { j.RunAtTime = t }
 func (j *PasswordResetJob) GetRunAt() time.Time         { return j.RunAtTime }
 func (j *PasswordResetJob) Timeout() time.Duration      { return job.DefaultTimeout }
-
-

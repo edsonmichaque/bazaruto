@@ -560,4 +560,3 @@ func (s *PricingEngineService) ValidatePricingResult(result *PricingResult) erro
 
 	return nil
 }
-

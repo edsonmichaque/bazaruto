@@ -19,7 +19,7 @@ func TracingMiddleware(tracer *tracing.Tracer) func(http.Handler) http.Handler {
 
 			// Start span
 			_ = r.Method + " " + r.URL.Path
-			ctx, span := tracer.StartHTTPRequestSpan(ctx, r.Method, r.URL.Path)
+			spanCtx, span := tracer.StartHTTPRequestSpan(ctx, r.Method, r.URL.Path)
 			defer span.End()
 
 			// Add request attributes
@@ -45,7 +45,7 @@ func TracingMiddleware(tracer *tracing.Tracer) func(http.Handler) http.Handler {
 			ww := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
 			// Process request
-			next.ServeHTTP(ww, r)
+			next.ServeHTTP(ww, r.WithContext(spanCtx))
 
 			// Add response attributes
 			span.SetAttributes(

@@ -9,6 +9,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// Context keys for job execution
+type contextKey string
+
+const (
+	jobIDKey    contextKey = "job_id"
+	workerIDKey contextKey = "worker_id"
+)
+
 // Worker processes jobs from queues using a pool of goroutines
 type Worker struct {
 	adapter     Adapter
@@ -142,8 +150,8 @@ func (w *Worker) processQueue(ctx context.Context, queue string, workerID int, l
 	}
 
 	// Create execution context with job ID
-	jobCtx := context.WithValue(ctx, "job_id", serializedJob.ID)
-	jobCtx = context.WithValue(jobCtx, "worker_id", workerID)
+	jobCtx := context.WithValue(ctx, jobIDKey, serializedJob.ID)
+	jobCtx = context.WithValue(jobCtx, workerIDKey, workerID)
 
 	// Build middleware chain
 	handler := w.buildHandler(job)

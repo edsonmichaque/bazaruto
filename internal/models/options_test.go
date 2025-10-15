@@ -181,5 +181,3 @@ func TestListResponseLastPage(t *testing.T) {
 		t.Errorf("PrevPage = %v, want 1", response.PrevPage)
 	}
 }
-
-

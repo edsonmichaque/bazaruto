@@ -152,4 +152,3 @@ const (
 	MetricsCollectionInterval = 1 * time.Minute
 	MetricsRetentionPeriod    = 7 * 24 * time.Hour // 7 days
 )
-

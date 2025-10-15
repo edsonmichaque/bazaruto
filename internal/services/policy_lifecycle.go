@@ -231,7 +231,7 @@ func (s *PolicyLifecycleService) validateRenewalEligibility(policy *models.Polic
 	}
 
 	// Check if renewal is within allowed timeframe (e.g., 30 days before expiration)
-	daysUntilExpiration := policy.ExpirationDate.Sub(time.Now()).Hours() / 24
+	daysUntilExpiration := time.Until(policy.ExpirationDate).Hours() / 24
 	if daysUntilExpiration > 30 {
 		return fmt.Errorf("policy cannot be renewed more than 30 days before expiration")
 	}
@@ -640,7 +640,7 @@ func (s *PolicyLifecycleService) GetPolicyStatus(ctx context.Context, policyID u
 		Status:          policy.Status,
 		EffectiveDate:   policy.EffectiveDate,
 		ExpirationDate:  policy.ExpirationDate,
-		DaysUntilExpiry: int(policy.ExpirationDate.Sub(time.Now()).Hours() / 24),
+		DaysUntilExpiry: int(time.Until(policy.ExpirationDate).Hours() / 24),
 		CanRenew:        s.canRenew(policy),
 		CanCancel:       s.canCancel(policy),
 		AutoRenew:       policy.AutoRenew,
@@ -667,7 +667,7 @@ type PolicyStatus struct {
 func (s *PolicyLifecycleService) canRenew(policy *models.Policy) bool {
 	return policy.Status == "active" &&
 		policy.ExpirationDate.After(time.Now()) &&
-		policy.ExpirationDate.Sub(time.Now()).Hours()/24 <= 30
+		time.Until(policy.ExpirationDate).Hours()/24 <= 30
 }
 
 // canCancel checks if a policy can be cancelled.

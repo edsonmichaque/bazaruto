@@ -74,15 +74,6 @@ func queryParamInt(r *http.Request, name string, defaultValue int) (int, error) 
 	return strconv.Atoi(paramStr)
 }
 
-// queryParamBool extracts a query parameter as bool.
-func queryParamBool(r *http.Request, name string, defaultValue bool) (bool, error) {
-	paramStr := r.URL.Query().Get(name)
-	if paramStr == "" {
-		return defaultValue, nil
-	}
-	return strconv.ParseBool(paramStr)
-}
-
 // parseJSON parses JSON from request body.
 func parseJSON(r *http.Request, v interface{}) error {
 	if r.Body == nil {

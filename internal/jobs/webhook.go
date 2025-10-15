@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/edsonmichaque/bazaruto/pkg/job"
 	"github.com/edsonmichaque/bazaruto/internal/logger"
 	"github.com/edsonmichaque/bazaruto/internal/models"
 	"github.com/edsonmichaque/bazaruto/internal/services"
+	"github.com/edsonmichaque/bazaruto/pkg/job"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )

@@ -58,4 +58,3 @@ const (
 	WebhookStatusDelivered = "delivered"
 	WebhookStatusFailed    = "failed"
 )
-

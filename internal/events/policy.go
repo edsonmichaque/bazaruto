@@ -124,11 +124,11 @@ func NewPolicyCancelledEvent(policyID, userID, productID uuid.UUID, refundAmount
 // PolicyExpiredEvent is published when a policy expires.
 type PolicyExpiredEvent struct {
 	*BaseBusinessEvent
-	PolicyID      uuid.UUID `json:"policy_id"`
-	UserID        uuid.UUID `json:"user_id"`
-	ProductID     uuid.UUID `json:"product_id"`
+	PolicyID       uuid.UUID `json:"policy_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	ProductID      uuid.UUID `json:"product_id"`
 	ExpirationDate time.Time `json:"expiration_date"`
-	ExpiredAt     time.Time `json:"expired_at"`
+	ExpiredAt      time.Time `json:"expired_at"`
 }
 
 // NewPolicyExpiredEvent creates a new policy expired event.

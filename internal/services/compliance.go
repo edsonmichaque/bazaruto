@@ -591,4 +591,3 @@ func (s *ComplianceService) ValidateComplianceCheck(check *ComplianceCheck) erro
 
 	return nil
 }
-

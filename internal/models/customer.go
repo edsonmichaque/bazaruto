@@ -24,7 +24,7 @@ type Customer struct {
 	Employer         string                 `json:"employer"`
 	AnnualIncome     float64                `json:"annual_income"`
 	CreditScore      int                    `json:"credit_score"`
-	RiskProfile      string                 `json:"risk_profile"` // low, medium, high, very_high
+	RiskProfile      string                 `json:"risk_profile"`  // low, medium, high, very_high
 	CustomerTier     string                 `json:"customer_tier"` // bronze, silver, gold, platinum
 	Status           string                 `json:"status" gorm:"default:active"`
 	PreferredContact string                 `json:"preferred_contact"` // email, phone, sms
@@ -43,56 +43,56 @@ type Customer struct {
 	Metadata         map[string]interface{} `json:"metadata" gorm:"type:jsonb"`
 
 	// Relationships
-	User      User       `json:"user,omitempty" gorm:"foreignKey:UserID"`
-	Policies  []Policy   `json:"policies,omitempty" gorm:"foreignKey:CustomerID"`
-	Claims    []Claim    `json:"claims,omitempty" gorm:"foreignKey:CustomerID"`
-	Payments  []Payment  `json:"payments,omitempty" gorm:"foreignKey:CustomerID"`
-	Quotes    []Quote    `json:"quotes,omitempty" gorm:"foreignKey:CustomerID"`
+	User     User      `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	Policies []Policy  `json:"policies,omitempty" gorm:"foreignKey:CustomerID"`
+	Claims   []Claim   `json:"claims,omitempty" gorm:"foreignKey:CustomerID"`
+	Payments []Payment `json:"payments,omitempty" gorm:"foreignKey:CustomerID"`
+	Quotes   []Quote   `json:"quotes,omitempty" gorm:"foreignKey:CustomerID"`
 }
 
 // CustomerAddress represents a customer's address.
 type CustomerAddress struct {
 	Base
-	CustomerID  uuid.UUID `json:"customer_id" gorm:"not null"`
-	Type        string    `json:"type"` // home, work, mailing, billing
-	Line1       string    `json:"line1" gorm:"not null"`
-	Line2       string    `json:"line2"`
-	City        string    `json:"city" gorm:"not null"`
-	State       string    `json:"state" gorm:"not null"`
-	PostalCode  string    `json:"postal_code" gorm:"not null"`
-	Country     string    `json:"country" gorm:"not null"`
-	IsPrimary   bool      `json:"is_primary" gorm:"default:false"`
-	IsActive    bool      `json:"is_active" gorm:"default:true"`
+	CustomerID uuid.UUID `json:"customer_id" gorm:"not null"`
+	Type       string    `json:"type"` // home, work, mailing, billing
+	Line1      string    `json:"line1" gorm:"not null"`
+	Line2      string    `json:"line2"`
+	City       string    `json:"city" gorm:"not null"`
+	State      string    `json:"state" gorm:"not null"`
+	PostalCode string    `json:"postal_code" gorm:"not null"`
+	Country    string    `json:"country" gorm:"not null"`
+	IsPrimary  bool      `json:"is_primary" gorm:"default:false"`
+	IsActive   bool      `json:"is_active" gorm:"default:true"`
 }
 
 // CustomerDocument represents a customer's document.
 type CustomerDocument struct {
 	Base
-	CustomerID  uuid.UUID `json:"customer_id" gorm:"not null"`
-	Type        string    `json:"type"` // passport, driver_license, national_id, utility_bill, bank_statement
-	DocumentID  string    `json:"document_id" gorm:"not null"`
-	IssuingAuthority string `json:"issuing_authority"`
-	IssueDate   *time.Time `json:"issue_date"`
-	ExpiryDate  *time.Time `json:"expiry_date"`
-	Status      string    `json:"status" gorm:"default:pending"` // pending, verified, rejected, expired
-	FileURL     string    `json:"file_url"`
-	FileHash    string    `json:"file_hash"`
-	Metadata    map[string]interface{} `json:"metadata" gorm:"type:jsonb"`
+	CustomerID       uuid.UUID              `json:"customer_id" gorm:"not null"`
+	Type             string                 `json:"type"` // passport, driver_license, national_id, utility_bill, bank_statement
+	DocumentID       string                 `json:"document_id" gorm:"not null"`
+	IssuingAuthority string                 `json:"issuing_authority"`
+	IssueDate        *time.Time             `json:"issue_date"`
+	ExpiryDate       *time.Time             `json:"expiry_date"`
+	Status           string                 `json:"status" gorm:"default:pending"` // pending, verified, rejected, expired
+	FileURL          string                 `json:"file_url"`
+	FileHash         string                 `json:"file_hash"`
+	Metadata         map[string]interface{} `json:"metadata" gorm:"type:jsonb"`
 }
 
 // CustomerRiskFactor represents a risk factor associated with a customer.
 type CustomerRiskFactor struct {
 	Base
-	CustomerID  uuid.UUID `json:"customer_id" gorm:"not null"`
-	Factor      string    `json:"factor" gorm:"not null"` // age, occupation, location, credit_score, etc.
-	Value       string    `json:"value" gorm:"not null"`
-	Impact      float64   `json:"impact"` // Risk impact multiplier
-	Severity    string    `json:"severity"` // low, medium, high, critical
-	Source      string    `json:"source"` // internal, external, manual
-	ValidFrom   time.Time `json:"valid_from" gorm:"not null"`
-	ValidTo     *time.Time `json:"valid_to"`
-	IsActive    bool      `json:"is_active" gorm:"default:true"`
-	Metadata    map[string]interface{} `json:"metadata" gorm:"type:jsonb"`
+	CustomerID uuid.UUID              `json:"customer_id" gorm:"not null"`
+	Factor     string                 `json:"factor" gorm:"not null"` // age, occupation, location, credit_score, etc.
+	Value      string                 `json:"value" gorm:"not null"`
+	Impact     float64                `json:"impact"`   // Risk impact multiplier
+	Severity   string                 `json:"severity"` // low, medium, high, critical
+	Source     string                 `json:"source"`   // internal, external, manual
+	ValidFrom  time.Time              `json:"valid_from" gorm:"not null"`
+	ValidTo    *time.Time             `json:"valid_to"`
+	IsActive   bool                   `json:"is_active" gorm:"default:true"`
+	Metadata   map[string]interface{} `json:"metadata" gorm:"type:jsonb"`
 }
 
 // TableName returns the table name for the Customer model.
@@ -134,15 +134,15 @@ func (c *Customer) GetPrimaryAddress() *CustomerAddress {
 func (c *Customer) GetActiveRiskFactors() []CustomerRiskFactor {
 	var activeFactors []CustomerRiskFactor
 	now := time.Now()
-	
+
 	for _, factor := range c.RiskFactors {
-		if factor.IsActive && 
-		   factor.ValidFrom.Before(now) && 
-		   (factor.ValidTo == nil || factor.ValidTo.After(now)) {
+		if factor.IsActive &&
+			factor.ValidFrom.Before(now) &&
+			(factor.ValidTo == nil || factor.ValidTo.After(now)) {
 			activeFactors = append(activeFactors, factor)
 		}
 	}
-	
+
 	return activeFactors
 }
 
@@ -189,4 +189,3 @@ func (c *Customer) GetCustomerTierLevel() int {
 		return 0
 	}
 }
-
