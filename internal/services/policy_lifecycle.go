@@ -27,13 +27,13 @@ type PolicyLifecycleService struct {
 
 // NewPolicyLifecycleService creates a new PolicyLifecycleService instance.
 func NewPolicyLifecycleService(
+	logger *logger.Logger,
+	configManager *config.Manager,
 	policyStore store.PolicyStore,
 	paymentStore store.PaymentStore,
 	subscriptionStore store.SubscriptionStore,
 	userStore store.UserStore,
 	eventService *EventService,
-	configManager *config.Manager,
-	logger *logger.Logger,
 ) *PolicyLifecycleService {
 	return &PolicyLifecycleService{
 		policyStore:       policyStore,
