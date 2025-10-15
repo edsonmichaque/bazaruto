@@ -21,7 +21,7 @@ type Invoice struct {
 	DueDate        time.Time     `json:"due_date" gorm:"not null"`
 	PaidAt         *time.Time    `json:"paid_at"`
 	PaymentID      *uuid.UUID    `json:"payment_id"`
-	Items          []InvoiceItem `json:"items" gorm:"embedded;embedded_prefix:item_"`
+	Items          []InvoiceItem `json:"items" gorm:"type:json"`
 
 	// Relationships
 	User         User          `json:"user,omitempty" gorm:"foreignKey:UserID"`

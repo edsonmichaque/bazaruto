@@ -9,9 +9,11 @@ import (
 
 // RunMigrations runs all database migrations using GORM AutoMigrate.
 func RunMigrations(db *gorm.DB) error {
-	// Enable UUID extension
-	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS \"pgcrypto\"").Error; err != nil {
-		return fmt.Errorf("failed to enable pgcrypto extension: %w", err)
+	// Enable UUID extension (PostgreSQL only)
+	if db.Dialector.Name() == "postgres" {
+		if err := db.Exec("CREATE EXTENSION IF NOT EXISTS \"pgcrypto\"").Error; err != nil {
+			return fmt.Errorf("failed to enable pgcrypto extension: %w", err)
+		}
 	}
 
 	// Run migrations for all models

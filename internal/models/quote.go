@@ -19,7 +19,7 @@ type Quote struct {
 	Tax         float64      `json:"tax" gorm:"default:0"`
 	Status      string       `json:"status" gorm:"default:pending"`
 	ValidUntil  time.Time    `json:"valid_until" gorm:"not null"`
-	RiskFactors []RiskFactor `json:"risk_factors" gorm:"embedded;embedded_prefix:risk_"`
+	RiskFactors []RiskFactor `json:"risk_factors" gorm:"type:json"`
 
 	// Relationships
 	Product  Product  `json:"product,omitempty" gorm:"foreignKey:ProductID"`

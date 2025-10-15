@@ -22,7 +22,7 @@ type Claim struct {
 	ResolvedDate *time.Time `json:"resolved_date"`
 	PaidAmount   float64    `json:"paid_amount" gorm:"default:0"`
 	DenialReason *string    `json:"denial_reason"`
-	Documents    []Document `json:"documents" gorm:"embedded;embedded_prefix:doc_"`
+	Documents    []Document `json:"documents" gorm:"type:json"`
 
 	// Relationships
 	Policy Policy `json:"policy,omitempty" gorm:"foreignKey:PolicyID"`
