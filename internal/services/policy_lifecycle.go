@@ -10,7 +10,6 @@ import (
 	"github.com/edsonmichaque/bazaruto/internal/logger"
 	"github.com/edsonmichaque/bazaruto/internal/models"
 	"github.com/edsonmichaque/bazaruto/internal/store"
-	"github.com/edsonmichaque/bazaruto/pkg/job"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -22,7 +21,6 @@ type PolicyLifecycleService struct {
 	subscriptionStore store.SubscriptionStore
 	userStore         store.UserStore
 	eventService      *EventService
-	dispatcher        job.Dispatcher
 	configManager     *config.Manager
 	logger            *logger.Logger
 }
@@ -34,7 +32,6 @@ func NewPolicyLifecycleService(
 	subscriptionStore store.SubscriptionStore,
 	userStore store.UserStore,
 	eventService *EventService,
-	dispatcher job.Dispatcher,
 	configManager *config.Manager,
 	logger *logger.Logger,
 ) *PolicyLifecycleService {
@@ -44,7 +41,6 @@ func NewPolicyLifecycleService(
 		subscriptionStore: subscriptionStore,
 		userStore:         userStore,
 		eventService:      eventService,
-		dispatcher:        dispatcher,
 		configManager:     configManager,
 		logger:            logger,
 	}
@@ -183,19 +179,23 @@ func (s *PolicyLifecycleService) RenewPolicy(ctx context.Context, policyID uuid.
 		}
 	}
 
-	// Dispatch renewal notification job
-	// Dispatch notification job (assuming dispatcher is always initialized)
-	{
-		notificationJob := &NotificationJob{
-			UserID:      newPolicy.UserID,
-			Type:        "policy_renewal",
-			Subject:     "Policy Renewal Confirmation",
-			Message:     fmt.Sprintf("Your policy has been successfully renewed. New policy ID: %s", newPolicy.ID.String()),
-			PriorityStr: "normal",
-		}
-		if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
-			s.logger.Error("Failed to dispatch renewal notification job",
-				zap.String("policy_id", newPolicy.ID.String()),
+	// Publish policy renewed event
+	if s.eventService != nil {
+		policyRenewedEvent := events.NewPolicyRenewedEvent(
+			policy.ID,
+			newPolicy.ID,
+			newPolicy.UserID,
+			newPolicy.ProductID,
+			newPolicy.Premium,
+			newPolicy.Currency,
+			newPolicy.EffectiveDate,
+			newPolicy.ExpirationDate,
+			time.Now(),
+		)
+		if err := s.eventService.PublishEvent(ctx, policyRenewedEvent); err != nil {
+			s.logger.Error("Failed to publish policy renewed event",
+				zap.String("old_policy_id", policy.ID.String()),
+				zap.String("new_policy_id", newPolicy.ID.String()),
 				zap.Error(err))
 		}
 	}
@@ -408,18 +408,20 @@ func (s *PolicyLifecycleService) CancelPolicy(ctx context.Context, policyID uuid
 			zap.String("reason", cancellationOptions.Reason))
 	}
 
-	// Dispatch cancellation notification job
-	// Dispatch notification job (assuming dispatcher is always initialized)
-	{
-		notificationJob := &NotificationJob{
-			UserID:      policy.UserID,
-			Type:        "policy_cancellation",
-			Subject:     "Policy Cancellation Confirmation",
-			Message:     fmt.Sprintf("Your policy has been cancelled. Refund amount: %.2f %s", refundAmount, policy.Currency),
-			PriorityStr: "normal",
-		}
-		if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
-			s.logger.Error("Failed to dispatch cancellation notification job",
+	// Publish policy cancelled event
+	if s.eventService != nil {
+		policyCancelledEvent := events.NewPolicyCancelledEvent(
+			policy.ID,
+			policy.UserID,
+			policy.ProductID,
+			refundAmount,
+			policy.Currency,
+			now,
+			cancellationOptions.EffectiveDate,
+			cancellationOptions.Reason,
+		)
+		if err := s.eventService.PublishEvent(ctx, policyCancelledEvent); err != nil {
+			s.logger.Error("Failed to publish policy cancelled event",
 				zap.String("policy_id", policy.ID.String()),
 				zap.Error(err))
 		}
@@ -544,18 +546,17 @@ func (s *PolicyLifecycleService) ProcessExpiredPolicies(ctx context.Context) err
 			continue
 		}
 
-		// Dispatch notification job for expired policy
-		// Dispatch notification job (assuming dispatcher is always initialized)
-		{
-			notificationJob := &NotificationJob{
-				UserID:      policy.UserID,
-				Type:        "policy_expired",
-				Subject:     "Policy Expired",
-				Message:     fmt.Sprintf("Your policy %s has expired. Please renew to maintain coverage.", policy.ID.String()),
-				PriorityStr: "high",
-			}
-			if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
-				s.logger.Error("Failed to dispatch expired policy notification",
+		// Publish policy expired event
+		if s.eventService != nil {
+			policyExpiredEvent := events.NewPolicyExpiredEvent(
+				policy.ID,
+				policy.UserID,
+				policy.ProductID,
+				policy.ExpirationDate,
+				time.Now(),
+			)
+			if err := s.eventService.PublishEvent(ctx, policyExpiredEvent); err != nil {
+				s.logger.Error("Failed to publish policy expired event",
 					zap.String("policy_id", policy.ID.String()),
 					zap.Error(err))
 			}
@@ -600,18 +601,17 @@ func (s *PolicyLifecycleService) ProcessGracePeriodExpirations(ctx context.Conte
 			continue
 		}
 
-		// Dispatch notification job for grace period expiration
-		// Dispatch notification job (assuming dispatcher is always initialized)
-		{
-			notificationJob := &NotificationJob{
-				UserID:      policy.UserID,
-				Type:        "grace_period_expired",
-				Subject:     "Policy Cancelled - Grace Period Expired",
-				Message:     fmt.Sprintf("Your policy %s has been cancelled due to expired grace period.", policy.ID.String()),
-				PriorityStr: "high",
-			}
-			if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
-				s.logger.Error("Failed to dispatch grace period expiration notification",
+		// Publish grace period expiration event
+		if s.eventService != nil {
+			gracePeriodExpiredEvent := events.NewGracePeriodExpiredEvent(
+				policy.ID,
+				policy.UserID,
+				policy.ProductID,
+				time.Now().Add(-15*24*time.Hour), // Assume 15 days grace period
+				time.Now(),
+			)
+			if err := s.eventService.PublishEvent(ctx, gracePeriodExpiredEvent); err != nil {
+				s.logger.Error("Failed to publish grace period expired event",
 					zap.String("policy_id", policy.ID.String()),
 					zap.Error(err))
 			}
@@ -764,18 +764,18 @@ func (s *PolicyLifecycleService) SendRenewalReminders(ctx context.Context, daysA
 
 	sentCount := 0
 	for _, policy := range upcomingRenewals {
-		// Dispatch renewal reminder notification
-		// Dispatch notification job (assuming dispatcher is always initialized)
-		{
-			notificationJob := &NotificationJob{
-				UserID:      policy.UserID,
-				Type:        "renewal_reminder",
-				Subject:     "Policy Renewal Reminder",
-				Message:     fmt.Sprintf("Your policy %s expires in %d days. Please renew to maintain coverage.", policy.ID.String(), daysAhead),
-				PriorityStr: "normal",
-			}
-			if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
-				s.logger.Error("Failed to dispatch renewal reminder",
+		// Publish renewal reminder event
+		if s.eventService != nil {
+			renewalReminderEvent := events.NewRenewalReminderEvent(
+				policy.ID,
+				policy.UserID,
+				policy.ProductID,
+				daysAhead,
+				policy.ExpirationDate,
+				time.Now(),
+			)
+			if err := s.eventService.PublishEvent(ctx, renewalReminderEvent); err != nil {
+				s.logger.Error("Failed to publish renewal reminder event",
 					zap.String("policy_id", policy.ID.String()),
 					zap.Error(err))
 				continue
@@ -789,49 +789,4 @@ func (s *PolicyLifecycleService) SendRenewalReminders(ctx context.Context, daysA
 		zap.Int("count", sentCount))
 
 	return nil
-}
-
-// NotificationJob represents a notification job for the policy lifecycle service.
-type NotificationJob struct {
-	UserID      uuid.UUID `json:"user_id"`
-	Type        string    `json:"type"`
-	Subject     string    `json:"subject"`
-	Message     string    `json:"message"`
-	PriorityStr string    `json:"priority"`
-}
-
-// Perform executes the notification job.
-func (j *NotificationJob) Perform(ctx context.Context) error {
-	// In a real implementation, this would send the actual notification
-	// For now, we'll just log it
-	return nil
-}
-
-// Queue returns the queue name for this job.
-func (j *NotificationJob) Queue() string {
-	return "notifications"
-}
-
-// MaxRetries returns the maximum number of retry attempts.
-func (j *NotificationJob) MaxRetries() int {
-	return 3
-}
-
-// RetryBackoff returns the base backoff duration for retries.
-func (j *NotificationJob) RetryBackoff() time.Duration {
-	return 5 * time.Second
-}
-
-// Priority returns the job priority.
-func (j *NotificationJob) Priority() int {
-	switch j.PriorityStr {
-	case "high":
-		return 10
-	case "normal":
-		return 5
-	case "low":
-		return 1
-	default:
-		return 5
-	}
 }
