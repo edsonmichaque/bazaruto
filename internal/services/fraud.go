@@ -27,12 +27,12 @@ type FraudDetectionService struct {
 
 // NewFraudDetectionService creates a new FraudDetectionService instance.
 func NewFraudDetectionService(
+	logger *logger.Logger,
+	configManager *config.Manager,
 	claimStore store.ClaimStore,
 	policyStore store.PolicyStore,
 	customerStore store.CustomerStore,
-	configManager *config.Manager,
 	eventService *EventService,
-	logger *logger.Logger,
 ) *FraudDetectionService {
 	return &FraudDetectionService{
 		claimStore:    claimStore,
