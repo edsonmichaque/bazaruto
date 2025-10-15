@@ -7,6 +7,9 @@
 bin/
 dist/
 
+# Application binary
+bazarutod
+
 # Test binary, built with `go test -c`
 *.test
 
