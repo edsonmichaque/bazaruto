@@ -20,7 +20,7 @@ type FraudDetectionService struct {
 	claimStore    store.ClaimStore
 	policyStore   store.PolicyStore
 	customerStore store.CustomerStore
-	configManager *config.ConfigManager
+	configManager *config.Manager
 	eventService  *EventService
 	logger        *logger.Logger
 }
@@ -30,7 +30,7 @@ func NewFraudDetectionService(
 	claimStore store.ClaimStore,
 	policyStore store.PolicyStore,
 	customerStore store.CustomerStore,
-	configManager *config.ConfigManager,
+	configManager *config.Manager,
 	eventService *EventService,
 	logger *logger.Logger,
 ) *FraudDetectionService {

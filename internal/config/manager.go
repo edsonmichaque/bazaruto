@@ -13,8 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// ConfigManager manages business rule configurations.
-type ConfigManager struct {
+// Manager manages business rule configurations.
+type Manager struct {
 	logger      *logger.Logger
 	config      *BusinessRulesConfig
 	lastUpdated time.Time
@@ -22,20 +22,20 @@ type ConfigManager struct {
 	configPath  string
 }
 
-// NewConfigManager creates a new configuration manager.
-func NewConfigManager(logger *logger.Logger, configPath string) *ConfigManager {
+// NewManager creates a new configuration manager.
+func NewManager(logger *logger.Logger, configPath string) *Manager {
 	if configPath == "" {
 		configPath = "config/business_rules.json"
 	}
 
-	return &ConfigManager{
+	return &Manager{
 		logger:     logger,
 		configPath: configPath,
 	}
 }
 
 // LoadConfig loads the business rules configuration from file.
-func (m *ConfigManager) LoadConfig(ctx context.Context) error {
+func (m *Manager) LoadConfig(ctx context.Context) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -55,7 +55,7 @@ func (m *ConfigManager) LoadConfig(ctx context.Context) error {
 }
 
 // loadFromFile loads configuration from a JSON file.
-func (m *ConfigManager) loadFromFile() error {
+func (m *Manager) loadFromFile() error {
 	data, err := os.ReadFile(m.configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
@@ -71,7 +71,7 @@ func (m *ConfigManager) loadFromFile() error {
 }
 
 // SaveConfig saves the current configuration to file.
-func (m *ConfigManager) SaveConfig(ctx context.Context) error {
+func (m *Manager) SaveConfig(ctx context.Context) error {
 	m.mutex.RLock()
 	config := m.config
 	m.mutex.RUnlock()
@@ -106,7 +106,7 @@ func (m *ConfigManager) SaveConfig(ctx context.Context) error {
 }
 
 // GetConfig returns the current business rules configuration.
-func (m *ConfigManager) GetConfig() *BusinessRulesConfig {
+func (m *Manager) GetConfig() *BusinessRulesConfig {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
@@ -120,7 +120,7 @@ func (m *ConfigManager) GetConfig() *BusinessRulesConfig {
 }
 
 // UpdateConfig updates the business rules configuration.
-func (m *ConfigManager) UpdateConfig(ctx context.Context, config *BusinessRulesConfig) error {
+func (m *Manager) UpdateConfig(ctx context.Context, config *BusinessRulesConfig) error {
 	if config == nil {
 		return fmt.Errorf("configuration cannot be nil")
 	}
@@ -146,19 +146,19 @@ func (m *ConfigManager) UpdateConfig(ctx context.Context, config *BusinessRulesC
 }
 
 // RefreshConfig refreshes the configuration from file.
-func (m *ConfigManager) RefreshConfig(ctx context.Context) error {
+func (m *Manager) RefreshConfig(ctx context.Context) error {
 	return m.LoadConfig(ctx)
 }
 
 // GetLastUpdated returns when the configuration was last updated.
-func (m *ConfigManager) GetLastUpdated() time.Time {
+func (m *Manager) GetLastUpdated() time.Time {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	return m.lastUpdated
 }
 
 // validateConfig validates the business rules configuration.
-func (m *ConfigManager) validateConfig(config *BusinessRulesConfig) error {
+func (m *Manager) validateConfig(config *BusinessRulesConfig) error {
 	if config == nil {
 		return fmt.Errorf("configuration cannot be nil")
 	}
@@ -168,7 +168,7 @@ func (m *ConfigManager) validateConfig(config *BusinessRulesConfig) error {
 }
 
 // getDefaultConfig returns the default business rules configuration.
-func (m *ConfigManager) getDefaultConfig() *BusinessRulesConfig {
+func (m *Manager) getDefaultConfig() *BusinessRulesConfig {
 	return &BusinessRulesConfig{
 		FraudDetection: FraudDetectionConfig{
 			Enabled: true,
