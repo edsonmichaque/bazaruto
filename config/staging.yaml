@@ -1,0 +1,82 @@
+# Staging Environment Configuration
+# This configuration is optimized for staging/testing environment
+
+server:
+  addr: ":8080"
+  read_timeout: 30s
+  write_timeout: 60s
+  idle_timeout: 90s
+
+# PostgreSQL database for staging
+db:
+  dsn: "${DATABASE_URL}"
+  max_connections: 25
+  min_connections: 5
+  connect_timeout: 10s
+  acquire_timeout: 5s
+  max_lifetime: 45m
+  idle_timeout: 12m
+
+# Redis for staging
+redis:
+  addr: "${REDIS_URL}"
+  password: "${REDIS_PASSWORD}"
+  db: 1
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+
+# Moderate rate limiting for staging
+rate:
+  enabled: true
+  provider: redis
+  per_minute: 300
+  burst: 60
+  key_strategy: ip
+  key_prefix: "rl:"
+  ttl: 10m
+  gc_interval: 5m
+
+# Staging observability settings
+observability:
+  log:
+    level: info
+    format: json
+  metrics:
+    enabled: true
+    path: /metrics
+  tracing:
+    enabled: true
+    endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+    service_name: bazaruto-staging
+
+# Email configuration for staging (test mode)
+email:
+  enabled: true
+  provider: smtp
+  smtp:
+    host: "${SMTP_HOST}"
+    port: "${SMTP_PORT}"
+    username: "${SMTP_USERNAME}"
+    password: "${SMTP_PASSWORD}"
+    from: "staging@bazaruto.com"
+    tls: true
+
+# Webhooks enabled for staging
+webhooks:
+  enabled: true
+  timeout: 30s
+  max_retries: 3
+  retry_delay: 5s
+
+# Moderate security for staging
+security:
+  cors:
+    enabled: true
+    origins: ["${ALLOWED_ORIGINS}"]
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    headers: ["Content-Type", "Authorization", "X-API-Key"]
+    credentials: true
+  csrf:
+    enabled: false
+    secret: "${CSRF_SECRET}"

@@ -1,0 +1,116 @@
+# Production Environment Configuration
+# This configuration is optimized for production deployment
+
+server:
+  addr: ":8080"
+  read_timeout: 30s
+  write_timeout: 60s
+  idle_timeout: 90s
+
+# PostgreSQL database for production
+db:
+  dsn: "${DATABASE_URL}"
+  max_connections: 50
+  min_connections: 10
+  connect_timeout: 10s
+  acquire_timeout: 5s
+  max_lifetime: 60m
+  idle_timeout: 15m
+
+# Redis for production caching and rate limiting
+redis:
+  addr: "${REDIS_URL}"
+  password: "${REDIS_PASSWORD}"
+  db: 0
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+
+# Strict rate limiting for production
+rate:
+  enabled: true
+  provider: redis
+  per_minute: 120
+  burst: 30
+  key_strategy: ip
+  key_prefix: "rl:"
+  ttl: 10m
+  gc_interval: 5m
+  
+  policies:
+    - name: quotes-write
+      match:
+        path_prefix: /v1/quotes
+        methods: [POST]
+      limits:
+        - scope: global
+          per_minute: 300
+          burst: 60
+        - scope: header
+          header: X-API-Key
+          per_minute: 120
+          burst: 30
+    - name: policies-read
+      match:
+        path_prefix: /v1/policies
+        methods: [GET]
+      limits:
+        - scope: global
+          per_minute: 1000
+          burst: 200
+
+# Production observability settings
+observability:
+  log:
+    level: info
+    format: json
+  metrics:
+    enabled: true
+    path: /metrics
+  tracing:
+    enabled: true
+    endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+    service_name: bazaruto
+
+# Production email configuration
+email:
+  enabled: true
+  provider: "${EMAIL_PROVIDER}"
+  smtp:
+    host: "${SMTP_HOST}"
+    port: "${SMTP_PORT}"
+    username: "${SMTP_USERNAME}"
+    password: "${SMTP_PASSWORD}"
+    from: "${EMAIL_FROM}"
+    tls: true
+  sendgrid:
+    api_key: "${SENDGRID_API_KEY}"
+    from: "${EMAIL_FROM}"
+
+# Webhooks enabled for production
+webhooks:
+  enabled: true
+  timeout: 30s
+  max_retries: 3
+  retry_delay: 5s
+
+# Strict security for production
+security:
+  cors:
+    enabled: true
+    origins: ["${ALLOWED_ORIGINS}"]
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    headers: ["Content-Type", "Authorization", "X-API-Key"]
+    credentials: true
+  csrf:
+    enabled: true
+    secret: "${CSRF_SECRET}"
+  headers:
+    - name: X-Content-Type-Options
+      value: nosniff
+    - name: X-Frame-Options
+      value: DENY
+    - name: X-XSS-Protection
+      value: "1; mode=block"
+    - name: Strict-Transport-Security
+      value: "max-age=31536000; includeSubDomains"

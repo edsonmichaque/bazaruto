@@ -1,10 +1,14 @@
-# GoReleaser configuration for Bazaruto
+# GoReleaser configuration for Bazaruto Insurance Platform
 # https://goreleaser.com/
+
+project_name: bazaruto
 
 before:
   hooks:
     - go mod tidy
     - go mod verify
+    - go vet ./...
+    - go test -short ./...
 
 builds:
   - id: bazarutod
@@ -21,9 +25,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
+      - -X github.com/edsonmichaque/bazaruto/internal/version.Version={{.Version}}
+      - -X github.com/edsonmichaque/bazaruto/internal/version.Commit={{.Commit}}
+      - -X github.com/edsonmichaque/bazaruto/internal/version.Date={{.Date}}
     env:
       - CGO_ENABLED=0
 
@@ -34,9 +38,11 @@ archives:
       - goos: windows
         format: zip
     files:
-      - config.yaml
+      - config.yaml.example
+      - config/business_rules.json.example
       - README.md
       - LICENSE
+      - docs/
 
 checksum:
   name_template: 'checksums.txt'
@@ -50,6 +56,7 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
+      - '^chore:'
 
 dockers:
   - image_templates:
@@ -60,12 +67,15 @@ dockers:
     build_flag_templates:
       - --platform=linux/amd64
       - --platform=linux/arm64
+    extra_files:
+      - config.yaml.example
+      - config/business_rules.json.example
 
 nfpms:
   - id: bazarutod
     package_name: bazarutod
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    description: "Bazaruto backend service for insurance product marketplace"
+    description: "Bazaruto Insurance Platform - Backend service for insurance product marketplace"
     homepage: "https://github.com/edsonmichaque/bazaruto"
     maintainer: "Bazaruto Team <team@bazaruto.com>"
     vendor: "Bazaruto"
@@ -74,16 +84,24 @@ nfpms:
       - deb
       - rpm
     contents:
-      - src: config.yaml
-        dst: /etc/bazaruto/config.yaml
+      - src: config.yaml.example
+        dst: /etc/bazaruto/config.yaml.example
+      - src: config/business_rules.json.example
+        dst: /etc/bazaruto/business_rules.json.example
       - src: README.md
         dst: /usr/share/doc/bazaruto/README.md
       - src: LICENSE
         dst: /usr/share/doc/bazaruto/LICENSE
-    empty_folders:
-      - /var/lib/bazaruto
-      - /var/log/bazaruto
-      - /var/cache/bazaruto
+      - src: docs/
+        dst: /usr/share/doc/bazaruto/
+      - dst: /var/lib/bazaruto
+        type: dir
+      - dst: /var/log/bazaruto
+        type: dir
+      - dst: /var/cache/bazaruto
+        type: dir
+      - dst: /etc/bazaruto
+        type: dir
     scripts:
       preinstall: packaging/scripts/preinstall.sh
       postinstall: packaging/scripts/postinstall.sh
