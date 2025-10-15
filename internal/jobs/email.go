@@ -11,6 +11,7 @@ import (
 	"github.com/edsonmichaque/bazaruto/internal/models"
 	"github.com/edsonmichaque/bazaruto/internal/services"
 	"github.com/edsonmichaque/bazaruto/pkg/job"
+	"github.com/go-mail/mail/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -25,6 +26,13 @@ type SendEmailJob struct {
 	From      string    `json:"from"`
 	Attempts  int       `json:"attempts"`
 	RunAtTime time.Time `json:"run_at_time"`
+
+	// SMTP Configuration (can be injected or from config)
+	SMTPHost     string `json:"smtp_host,omitempty"`
+	SMTPPort     int    `json:"smtp_port,omitempty"`
+	SMTPUsername string `json:"smtp_username,omitempty"`
+	SMTPPassword string `json:"smtp_password,omitempty"`
+	SMTPTLS      bool   `json:"smtp_tls,omitempty"`
 }
 
 // Perform executes the email sending job
@@ -42,11 +50,8 @@ func (j *SendEmailJob) Perform(ctx context.Context) error {
 		from = "noreply@bazaruto.com"
 	}
 
-	// Create email message
-	message := j.createEmailMessage(from, j.To, j.Subject, j.Body)
-
-	// Send email via SMTP (in production, you'd use a service like SendGrid, SES, etc.)
-	if err := j.sendSMTPEmail(ctx, from, j.To, message); err != nil {
+	// Send email using go-mail
+	if err := j.sendEmailWithGoMail(ctx, from, j.To, j.Subject, j.Body); err != nil {
 		log.Error("Failed to send email",
 			zap.Error(err),
 			zap.String("to", j.To),
@@ -63,51 +68,82 @@ func (j *SendEmailJob) Perform(ctx context.Context) error {
 	return nil
 }
 
-// createEmailMessage creates a properly formatted email message
-func (j *SendEmailJob) createEmailMessage(from, to, subject, body string) string {
-	headers := make(map[string]string)
-	headers["From"] = from
-	headers["To"] = to
-	headers["Subject"] = subject
-	headers["MIME-Version"] = "1.0"
-	headers["Content-Type"] = "text/html; charset=UTF-8"
-
-	message := ""
-	for k, v := range headers {
-		message += fmt.Sprintf("%s: %s\r\n", k, v)
-	}
-	message += "\r\n" + body
-
-	return message
-}
-
-// sendSMTPEmail sends email via SMTP
-func (j *SendEmailJob) sendSMTPEmail(ctx context.Context, from, to, message string) error {
-	// In a real implementation, you would:
-	// 1. Get SMTP configuration from environment/config
-	// 2. Use a proper SMTP client or service like SendGrid, SES, etc.
-	// 3. Handle authentication, TLS, etc.
-
-	// For now, we'll simulate SMTP sending
-	// In production, replace this with actual SMTP logic:
-	// smtpHost := "smtp.gmail.com"
-	// smtpPort := "587"
-	// auth := smtp.PlainAuth("", username, password, smtpHost)
-	// err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, []string{to}, []byte(message))
-
-	// Simulate network delay
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(200 * time.Millisecond):
+// sendEmailWithGoMail sends email using the go-mail library
+func (j *SendEmailJob) sendEmailWithGoMail(ctx context.Context, from, to, subject, body string) error {
+	// Set default SMTP configuration if not provided
+	smtpHost := j.SMTPHost
+	if smtpHost == "" {
+		smtpHost = "localhost" // Default to localhost for development
 	}
 
-	// Simulate occasional failures for testing retry logic
-	if j.Attempts == 1 && strings.Contains(to, "fail@example.com") {
-		return fmt.Errorf("simulated SMTP failure")
+	smtpPort := j.SMTPPort
+	if smtpPort == 0 {
+		smtpPort = 1025 // Default to 1025 for development (MailHog, etc.)
+	}
+
+	// Create a new message
+	m := mail.NewMessage()
+	m.SetHeader("From", from)
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/html", body)
+
+	// Create a new dialer
+	d := mail.NewDialer(smtpHost, smtpPort, j.SMTPUsername, j.SMTPPassword)
+
+	// Configure TLS
+	if j.SMTPTLS {
+		d.StartTLSPolicy = mail.MandatoryStartTLS
+	} else {
+		d.StartTLSPolicy = mail.NoStartTLS
+	}
+
+	// Set timeout for context cancellation
+	d.Timeout = 30 * time.Second
+
+	// For development/testing, simulate email sending if no real SMTP is configured
+	if smtpHost == "localhost" && j.SMTPUsername == "" {
+		// Simulate network delay
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+
+		// Simulate occasional failures for testing retry logic
+		if j.Attempts == 1 && strings.Contains(to, "fail@example.com") {
+			return fmt.Errorf("simulated SMTP failure")
+		}
+
+		return nil
+	}
+
+	// Send the email
+	if err := d.DialAndSend(m); err != nil {
+		return fmt.Errorf("failed to send email via SMTP: %w", err)
 	}
 
 	return nil
+}
+
+// Queue returns the queue name for this job
+func (j *SendEmailJob) Queue() string {
+	return job.QueueMailers
+}
+
+// MaxRetries returns the maximum number of retries for this job
+func (j *SendEmailJob) MaxRetries() int {
+	return 3
+}
+
+// RetryBackoff returns the backoff duration for retries
+func (j *SendEmailJob) RetryBackoff() time.Duration {
+	return time.Duration(j.Attempts) * 30 * time.Second
+}
+
+// Priority returns the priority of this job
+func (j *SendEmailJob) Priority() int {
+	return 5 // Medium priority
 }
 
 // WelcomeEmailJob represents a job for sending welcome emails to new users
@@ -148,10 +184,13 @@ func (j *WelcomeEmailJob) Perform(ctx context.Context) error {
 
 	// Create and dispatch email job
 	emailJob := &SendEmailJob{
-		To:      user.Email,
-		Subject: subject,
-		Body:    body,
-		From:    "welcome@bazaruto.com",
+		ID:        uuid.New(),
+		To:        user.Email,
+		Subject:   subject,
+		Body:      body,
+		From:      "welcome@bazaruto.com",
+		Attempts:  j.Attempts,
+		RunAtTime: time.Now(),
 	}
 
 	// In a real implementation, you would dispatch this job to the email queue
@@ -169,6 +208,26 @@ func (j *WelcomeEmailJob) Perform(ctx context.Context) error {
 		zap.String("email", user.Email))
 
 	return nil
+}
+
+// Queue returns the queue name for this job
+func (j *WelcomeEmailJob) Queue() string {
+	return job.QueueMailers
+}
+
+// MaxRetries returns the maximum number of retries for this job
+func (j *WelcomeEmailJob) MaxRetries() int {
+	return 3
+}
+
+// RetryBackoff returns the backoff duration for retries
+func (j *WelcomeEmailJob) RetryBackoff() time.Duration {
+	return time.Duration(j.Attempts) * 30 * time.Second
+}
+
+// Priority returns the priority of this job
+func (j *WelcomeEmailJob) Priority() int {
+	return 3 // High priority for welcome emails
 }
 
 // generateWelcomeEmailBody generates the HTML body for the welcome email
@@ -370,47 +429,3 @@ func (j *PasswordResetJob) generatePasswordResetEmailBody(user *models.User, tok
 
 	return buf.String(), nil
 }
-
-// Common job interface implementations for all email jobs
-
-// SendEmailJob interface methods
-func (j *SendEmailJob) Queue() string               { return job.QueueMailers }
-func (j *SendEmailJob) MaxRetries() int             { return 3 }
-func (j *SendEmailJob) RetryBackoff() time.Duration { return time.Second }
-func (j *SendEmailJob) Priority() int               { return 0 }
-func (j *SendEmailJob) Type() string                { return "jobs.SendEmailJob" }
-func (j *SendEmailJob) SetID(id uuid.UUID)          { j.ID = id }
-func (j *SendEmailJob) GetID() uuid.UUID            { return j.ID }
-func (j *SendEmailJob) SetAttempts(attempts int)    { j.Attempts = attempts }
-func (j *SendEmailJob) GetAttempts() int            { return j.Attempts }
-func (j *SendEmailJob) SetRunAt(t time.Time)        { j.RunAtTime = t }
-func (j *SendEmailJob) GetRunAt() time.Time         { return j.RunAtTime }
-func (j *SendEmailJob) Timeout() time.Duration      { return job.DefaultTimeout }
-
-// WelcomeEmailJob interface methods
-func (j *WelcomeEmailJob) Queue() string               { return job.QueueMailers }
-func (j *WelcomeEmailJob) MaxRetries() int             { return 3 }
-func (j *WelcomeEmailJob) RetryBackoff() time.Duration { return time.Second }
-func (j *WelcomeEmailJob) Priority() int               { return 0 }
-func (j *WelcomeEmailJob) Type() string                { return "jobs.WelcomeEmailJob" }
-func (j *WelcomeEmailJob) SetID(id uuid.UUID)          { j.ID = id }
-func (j *WelcomeEmailJob) GetID() uuid.UUID            { return j.ID }
-func (j *WelcomeEmailJob) SetAttempts(attempts int)    { j.Attempts = attempts }
-func (j *WelcomeEmailJob) GetAttempts() int            { return j.Attempts }
-func (j *WelcomeEmailJob) SetRunAt(t time.Time)        { j.RunAtTime = t }
-func (j *WelcomeEmailJob) GetRunAt() time.Time         { return j.RunAtTime }
-func (j *WelcomeEmailJob) Timeout() time.Duration      { return job.DefaultTimeout }
-
-// PasswordResetJob interface methods
-func (j *PasswordResetJob) Queue() string               { return job.QueueMailers }
-func (j *PasswordResetJob) MaxRetries() int             { return 3 }
-func (j *PasswordResetJob) RetryBackoff() time.Duration { return time.Second }
-func (j *PasswordResetJob) Priority() int               { return 1 } // Higher priority than regular emails
-func (j *PasswordResetJob) Type() string                { return "jobs.PasswordResetJob" }
-func (j *PasswordResetJob) SetID(id uuid.UUID)          { j.ID = id }
-func (j *PasswordResetJob) GetID() uuid.UUID            { return j.ID }
-func (j *PasswordResetJob) SetAttempts(attempts int)    { j.Attempts = attempts }
-func (j *PasswordResetJob) GetAttempts() int            { return j.Attempts }
-func (j *PasswordResetJob) SetRunAt(t time.Time)        { j.RunAtTime = t }
-func (j *PasswordResetJob) GetRunAt() time.Time         { return j.RunAtTime }
-func (j *PasswordResetJob) Timeout() time.Duration      { return job.DefaultTimeout }
