@@ -278,7 +278,7 @@ func (s *ClaimProcessingService) executeInitialReview(ctx context.Context, workf
 // executeFraudDetection executes the fraud detection stage.
 func (s *ClaimProcessingService) executeFraudDetection(ctx context.Context, workflow *ClaimWorkflow, stage *WorkflowStage) error {
 	// Run fraud detection analysis
-	fraudScore, err := s.fraudService.AnalyzeClaimForFraudV2(ctx, workflow.ClaimID)
+	fraudScore, err := s.fraudService.AnalyzeClaimForFraud(ctx, workflow.ClaimID)
 	if err != nil {
 		return fmt.Errorf("failed to analyze fraud: %w", err)
 	}
