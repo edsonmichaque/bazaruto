@@ -100,7 +100,7 @@ func (s *FraudDetectionService) AnalyzeClaimForFraud(ctx context.Context, claimI
 
 	// Analyze various fraud indicators using configuration
 	factors := []FraudFactor{
-		s.analyzeClaimTiming(claim, policy, &fraudConfig),
+		s.analyzeClaimTiming(&fraudConfig, claim, policy),
 		s.analyzeClaimAmount(claim, policy, &fraudConfig),
 		s.analyzeCustomerHistory(claim, customer, &fraudConfig),
 		s.analyzeIncidentPatterns(claim, policy, &fraudConfig),
@@ -167,7 +167,7 @@ func (s *FraudDetectionService) AnalyzeClaimForFraud(ctx context.Context, claimI
 }
 
 // analyzeClaimTiming analyzes timing-related fraud indicators using configuration.
-func (s *FraudDetectionService) analyzeClaimTiming(claim *models.Claim, policy *models.Policy, config *config.FraudDetectionConfig) FraudFactor {
+func (s *FraudDetectionService) analyzeClaimTiming(config *config.FraudDetectionConfig, claim *models.Claim, policy *models.Policy) FraudFactor {
 	factor := FraudFactor{
 		Factor: "claim_timing",
 		Weight: config.FactorWeights["claim_timing"],
