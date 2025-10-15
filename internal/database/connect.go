@@ -2,9 +2,11 @@ package database
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -14,7 +16,8 @@ type Database struct {
 	*gorm.DB
 }
 
-// Connect establishes a connection to PostgreSQL with the given DSN and configuration.
+// Connect establishes a connection to the database with the given DSN and configuration.
+// Supports both PostgreSQL and SQLite based on the DSN format.
 func Connect(dsn string, cfg DBConfig) (*Database, error) {
 	// Configure GORM logger
 	gormLogger := logger.Default.LogMode(logger.Info)
@@ -27,8 +30,21 @@ func Connect(dsn string, cfg DBConfig) (*Database, error) {
 		},
 	}
 
-	// Open database connection
-	db, err := gorm.Open(postgres.Open(dsn), config)
+	// Determine database type and open connection
+	var db *gorm.DB
+	var err error
+
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		// PostgreSQL connection
+		db, err = gorm.Open(postgres.Open(dsn), config)
+	} else if strings.HasPrefix(dsn, "file:") || strings.HasSuffix(dsn, ".db") || strings.HasSuffix(dsn, ".sqlite") || strings.HasSuffix(dsn, ".sqlite3") {
+		// SQLite connection
+		db, err = gorm.Open(sqlite.Open(dsn), config)
+	} else {
+		// Default to PostgreSQL for backward compatibility
+		db, err = gorm.Open(postgres.Open(dsn), config)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
