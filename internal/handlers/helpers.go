@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -85,66 +86,45 @@ func parseJSON(r *http.Request, v interface{}) error {
 
 // PaginationParams represents pagination parameters.
 type PaginationParams struct {
-	Limit  int
-	Offset int
+	Page    int
+	PerPage int
+	Limit   int
+	Offset  int
 }
 
 // parsePagination parses pagination parameters from query string.
+// Only supports page-based pagination (page, per_page).
 func parsePagination(r *http.Request) (*PaginationParams, error) {
-	limit, err := queryParamInt(r, "limit", 20)
+	// Parse page parameter
+	page, err := queryParamInt(r, "page", 1)
 	if err != nil {
-		return nil, fmt.Errorf("invalid limit parameter: %w", err)
+		return nil, fmt.Errorf("invalid page parameter: %w", err)
 	}
-	if limit < 0 {
-		limit = 20
-	}
-	if limit > 100 {
-		limit = 100
+	if page < 1 {
+		page = 1
 	}
 
-	offset, err := queryParamInt(r, "offset", 0)
+	// Parse per_page parameter
+	perPage, err := queryParamInt(r, "per_page", 20)
 	if err != nil {
-		return nil, fmt.Errorf("invalid offset parameter: %w", err)
+		return nil, fmt.Errorf("invalid per_page parameter: %w", err)
 	}
-	if offset < 0 {
-		offset = 0
+	if perPage < 1 {
+		perPage = 20
 	}
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	// Calculate offset from page and per_page for database queries
+	offset := (page - 1) * perPage
 
 	return &PaginationParams{
-		Limit:  limit,
-		Offset: offset,
+		Page:    page,
+		PerPage: perPage,
+		Limit:   perPage,
+		Offset:  offset,
 	}, nil
-}
-
-// PaginatedResponse represents a paginated response.
-type PaginatedResponse struct {
-	Data       interface{} `json:"data"`
-	Total      int64       `json:"total"`
-	Limit      int         `json:"limit"`
-	Offset     int         `json:"offset"`
-	HasMore    bool        `json:"has_more"`
-	NextOffset *int        `json:"next_offset,omitempty"`
-}
-
-// writePaginatedResponse writes a paginated response.
-func writePaginatedResponse(w http.ResponseWriter, data interface{}, total int64, limit, offset int) error {
-	hasMore := int64(offset+limit) < total
-	var nextOffset *int
-	if hasMore {
-		next := offset + limit
-		nextOffset = &next
-	}
-
-	response := PaginatedResponse{
-		Data:       data,
-		Total:      total,
-		Limit:      limit,
-		Offset:     offset,
-		HasMore:    hasMore,
-		NextOffset: nextOffset,
-	}
-
-	return WriteJSON(w, http.StatusOK, response)
 }
 
 // HealthResponse represents a health check response.
@@ -164,4 +144,54 @@ func writeHealthResponse(w http.ResponseWriter, status string, services map[stri
 		Services:  services,
 	}
 	return WriteJSON(w, http.StatusOK, response)
+}
+
+// writePagePaginatedResponse writes a page-based paginated response.
+func writePagePaginatedResponse(w http.ResponseWriter, r *http.Request, data interface{}, total int64, page, perPage int) error {
+	totalPages := int((total + int64(perPage) - 1) / int64(perPage))
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	// Add pagination headers (GitHub style)
+	w.Header().Set("Link", buildLinkHeader(r, page, perPage, totalPages))
+
+	// Return just the data - pagination info is in headers
+	return WriteJSON(w, http.StatusOK, data)
+}
+
+// buildLinkHeader builds Link header for pagination (GitHub style).
+func buildLinkHeader(r *http.Request, page, perPage, totalPages int) string {
+	var links []string
+
+	// Build base URL from request
+	baseURL := fmt.Sprintf("%s://%s%s",
+		getScheme(r),
+		r.Host,
+		strings.Split(r.URL.Path, "?")[0]) // Remove query parameters from path
+
+	// GitHub style: only next and first links
+	if page < totalPages {
+		nextPage := page + 1
+		links = append(links, fmt.Sprintf(`<%s?page=%d&per_page=%d>; rel="next"`, baseURL, nextPage, perPage))
+	}
+
+	// Always include first link (GitHub style)
+	links = append(links, fmt.Sprintf(`<%s?page=1&per_page=%d>; rel="first"`, baseURL, perPage))
+
+	return strings.Join(links, ", ")
+}
+
+// getScheme returns the scheme (http/https) from the request.
+func getScheme(r *http.Request) string {
+	if r.TLS != nil {
+		return "https"
+	}
+	if scheme := r.Header.Get("X-Forwarded-Proto"); scheme != "" {
+		return scheme
+	}
+	if scheme := r.Header.Get("X-Forwarded-Scheme"); scheme != "" {
+		return scheme
+	}
+	return "http"
 }

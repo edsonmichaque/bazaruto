@@ -61,8 +61,8 @@ func (h *PolicyHandler) ListPolicies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write response
-	if err := writePaginatedResponse(w, policies, total, pagination.Limit, pagination.Offset); err != nil {
+	// Write page-based paginated response
+	if err := writePagePaginatedResponse(w, r, policies, total, pagination.Page, pagination.PerPage); err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}

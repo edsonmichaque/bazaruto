@@ -14,6 +14,73 @@ import (
 	"go.uber.org/zap"
 )
 
+// Fraud detection constants
+const (
+	// Score thresholds
+	MaxFraudScore       = 100.0
+	MinFraudScore       = 0.0
+	HighRiskThreshold   = 70.0
+	MediumRiskThreshold = 40.0
+	LowRiskThreshold    = 20.0
+
+	// Timing thresholds (in days)
+	PolicyStartMultiplier = 4.0
+	NewAccountMultiplier  = 2.0
+	PolicyExpirationDays  = 30.0
+	PolicyAgeMonths       = 0.25 // 3 months
+	PolicyAgeYear         = 1.0
+
+	// Score adjustments
+	HighSeverityScore     = 80.0
+	MediumSeverityScore   = 60.0
+	ModerateSeverityScore = 40.0
+	LowSeverityScore      = 30.0
+	VeryLowSeverityScore  = 20.0
+	MinimalSeverityScore  = 10.0
+	CriticalSeverityScore = 5.0
+
+	// Coverage ratio thresholds
+	CoverageRatioHighThreshold = 0.8
+	CoverageRatioLowThreshold  = 0.1
+
+	// Business hours
+	BusinessHourStart = 9
+	BusinessHourEnd   = 17
+
+	// Amount thresholds
+	RoundAmountThreshold = 1000.0
+
+	// Document scoring
+	NoDocumentsScore   = 80.0
+	FewDocumentsScore  = 40.0
+	GoodDocumentsScore = 10.0
+
+	// Confidence calculation
+	MaxConfidence     = 1.0
+	TotalFactors      = 8.0
+	ConfidenceDivisor = 2.0
+
+	// Tier adjustments
+	HighTierMultiplier = 0.8
+	NoTierMultiplier   = 1.2
+
+	// Reporting delay
+	SignificantDelayScore = 20.0
+
+	// Account age scoring
+	NewAccountScore         = 60.0
+	RecentAccountScore      = 30.0
+	EstablishedAccountScore = 10.0
+
+	// Additional risk factors
+	HighRiskAddition     = 30.0
+	MediumRiskAddition   = 25.0
+	ModerateRiskAddition = 20.0
+	LowRiskAddition      = 15.0
+	MinimalRiskAddition  = 10.0
+	BusinessHourAddition = 5.0
+)
+
 // FraudDetectionService handles fraud detection and risk assessment for claims and applications.
 // This version uses Customer domain model, dynamic configuration, and events.
 type FraudDetectionService struct {
@@ -178,15 +245,15 @@ func (s *FraudDetectionService) analyzeClaimTiming(ctx context.Context, config *
 	policyStartThreshold := config.TimingRules.PolicyStartThreshold.Hours() / 24
 
 	if daysSincePolicyStart < policyStartThreshold {
-		factor.Score = 80
+		factor.Score = HighSeverityScore
 		factor.Description = fmt.Sprintf("Claim filed within %.0f days of policy start", policyStartThreshold)
 		factor.Severity = "high"
-	} else if daysSincePolicyStart < policyStartThreshold*4 { // 4x threshold
-		factor.Score = 40
-		factor.Description = fmt.Sprintf("Claim filed within %.0f days of policy start", policyStartThreshold*4)
+	} else if daysSincePolicyStart < policyStartThreshold*PolicyStartMultiplier {
+		factor.Score = ModerateSeverityScore
+		factor.Description = fmt.Sprintf("Claim filed within %.0f days of policy start", policyStartThreshold*PolicyStartMultiplier)
 		factor.Severity = "medium"
 	} else {
-		factor.Score = 10
+		factor.Score = MinimalSeverityScore
 		factor.Description = "Claim filed after policy has been active for a reasonable period"
 		factor.Severity = "low"
 	}
@@ -196,7 +263,7 @@ func (s *FraudDetectionService) analyzeClaimTiming(ctx context.Context, config *
 	reportingDelayThreshold := config.TimingRules.ReportingDelayThreshold.Hours() / 24
 
 	if reportingDelay > reportingDelayThreshold {
-		factor.Score += 20
+		factor.Score += SignificantDelayScore
 		factor.Description += fmt.Sprintf("; Significant delay in reporting (%.0f days)", reportingDelay)
 		if factor.Severity == "low" {
 			factor.Severity = "medium"
@@ -212,7 +279,7 @@ func (s *FraudDetectionService) analyzeClaimTiming(ctx context.Context, config *
 
 	// Apply business hours multiplier
 	hour := claim.IncidentDate.Hour()
-	if hour >= 9 && hour <= 17 {
+	if hour >= BusinessHourStart && hour <= BusinessHourEnd {
 		factor.Score *= config.TimingRules.BusinessHoursMultiplier
 		factor.Description += "; Incident occurred during business hours"
 	}
@@ -230,25 +297,25 @@ func (s *FraudDetectionService) analyzeClaimAmount(ctx context.Context, config *
 	// Check if claim amount is close to coverage limit
 	coverageRatio := claim.ClaimAmount / policy.CoverageAmount
 	if coverageRatio > config.AmountRules.CoverageRatioThreshold {
-		factor.Score = 70
+		factor.Score = HighSeverityScore
 		factor.Description = "Claim amount is very close to coverage limit"
 		factor.Severity = "high"
-	} else if coverageRatio > config.AmountRules.CoverageRatioThreshold*0.8 {
-		factor.Score = 40
+	} else if coverageRatio > config.AmountRules.CoverageRatioThreshold*CoverageRatioHighThreshold {
+		factor.Score = ModerateSeverityScore
 		factor.Description = "Claim amount is high relative to coverage"
 		factor.Severity = "medium"
-	} else if coverageRatio < 0.1 {
-		factor.Score = 5
+	} else if coverageRatio < CoverageRatioLowThreshold {
+		factor.Score = CriticalSeverityScore
 		factor.Description = "Claim amount is low relative to coverage"
 		factor.Severity = "low"
 	} else {
-		factor.Score = 15
+		factor.Score = LowSeverityScore
 		factor.Description = "Claim amount is within normal range"
 		factor.Severity = "low"
 	}
 
 	// Check for round numbers (potential red flag)
-	if claim.ClaimAmount > 1000 && int(claim.ClaimAmount)%1000 == 0 {
+	if claim.ClaimAmount > RoundAmountThreshold && int(claim.ClaimAmount)%int(RoundAmountThreshold) == 0 {
 		factor.Score += config.AmountRules.RoundNumberPenalty
 		factor.Description += "; Claim amount is a round number"
 		if factor.Severity == "low" {
@@ -286,29 +353,29 @@ func (s *FraudDetectionService) analyzeCustomerHistory(ctx context.Context, conf
 	newAccountThreshold := config.TimingRules.NewAccountThreshold
 
 	if accountAge < newAccountThreshold {
-		factor.Score = 60
+		factor.Score = NewAccountScore
 		factor.Description = fmt.Sprintf("New customer account (less than %.0f days old)", newAccountThreshold.Hours()/24)
 		factor.Severity = "high"
-	} else if accountAge < newAccountThreshold*2 {
-		factor.Score = 30
+	} else if accountAge < newAccountThreshold*NewAccountMultiplier {
+		factor.Score = RecentAccountScore
 		factor.Description = "Relatively new customer account"
 		factor.Severity = "medium"
 	} else {
-		factor.Score = 10
+		factor.Score = EstablishedAccountScore
 		factor.Description = "Established customer account"
 		factor.Severity = "low"
 	}
 
 	// Check customer status
 	if customer.Status != "active" {
-		factor.Score += 30
+		factor.Score += HighRiskAddition
 		factor.Description += "; Customer account is not active"
 		factor.Severity = "high"
 	}
 
 	// Check KYC status
 	if !customer.IsKYCVerified() {
-		factor.Score += 20
+		factor.Score += ModerateRiskAddition
 		factor.Description += "; Customer KYC not verified"
 		if factor.Severity == "low" {
 			factor.Severity = "medium"
@@ -317,7 +384,7 @@ func (s *FraudDetectionService) analyzeCustomerHistory(ctx context.Context, conf
 
 	// Check AML status
 	if !customer.IsAMLCleared() {
-		factor.Score += 25
+		factor.Score += MediumRiskAddition
 		factor.Description += "; Customer AML not cleared"
 		if factor.Severity == "low" {
 			factor.Severity = "medium"
@@ -326,7 +393,7 @@ func (s *FraudDetectionService) analyzeCustomerHistory(ctx context.Context, conf
 
 	// Check risk profile
 	if customer.IsHighRisk() {
-		factor.Score += 15
+		factor.Score += LowRiskAddition
 		factor.Description += fmt.Sprintf("; Customer has %s risk profile", customer.RiskProfile)
 		if factor.Severity == "low" {
 			factor.Severity = "medium"
@@ -345,23 +412,25 @@ func (s *FraudDetectionService) analyzeIncidentPatterns(ctx context.Context, con
 
 	// Check if incident occurred on weekend (common fraud pattern)
 	weekday := claim.IncidentDate.Weekday()
+
 	if weekday == time.Saturday || weekday == time.Sunday {
-		factor.Score = 30
+		factor.Score = LowSeverityScore
 		factor.Description = "Incident occurred on weekend"
 		factor.Severity = "medium"
 	} else {
-		factor.Score = 10
+		factor.Score = MinimalSeverityScore
 		factor.Description = "Incident occurred on weekday"
 		factor.Severity = "low"
 	}
 
 	// Check if incident occurred during business hours
 	hour := claim.IncidentDate.Hour()
-	if hour >= 9 && hour <= 17 {
-		factor.Score += 5
+
+	if hour >= BusinessHourStart && hour <= BusinessHourEnd {
+		factor.Score += BusinessHourAddition
 		factor.Description += "; Incident occurred during business hours"
 	} else {
-		factor.Score += 15
+		factor.Score += LowRiskAddition
 		factor.Description += "; Incident occurred outside business hours"
 		if factor.Severity == "low" {
 			factor.Severity = "medium"
@@ -383,15 +452,15 @@ func (s *FraudDetectionService) analyzeDocumentation(ctx context.Context, config
 	minDocCount := config.DocumentRules.MinDocumentCount
 
 	if docCount == 0 {
-		factor.Score = 80
+		factor.Score = NoDocumentsScore
 		factor.Description = "No supporting documents provided"
 		factor.Severity = "high"
 	} else if docCount < minDocCount {
-		factor.Score = 40
+		factor.Score = FewDocumentsScore
 		factor.Description = fmt.Sprintf("Limited supporting documentation (%d/%d)", docCount, minDocCount)
 		factor.Severity = "medium"
 	} else {
-		factor.Score = 10
+		factor.Score = GoodDocumentsScore
 		factor.Description = "Adequate supporting documentation"
 		factor.Severity = "low"
 	}
@@ -399,11 +468,11 @@ func (s *FraudDetectionService) analyzeDocumentation(ctx context.Context, config
 	// Check document quality (simplified)
 	for _, doc := range claim.Documents {
 		if doc.FileSize < config.DocumentRules.MinFileSize {
-			factor.Score += 10
+			factor.Score += MinimalRiskAddition
 			factor.Description += "; Some documents appear to be very small"
 		}
 		if doc.FileSize > config.DocumentRules.MaxFileSize {
-			factor.Score += 5
+			factor.Score += CriticalSeverityScore
 			factor.Description += "; Some documents are very large"
 		}
 	}
@@ -421,7 +490,7 @@ func (s *FraudDetectionService) analyzeGeographicRisk(ctx context.Context, confi
 	// Get customer's primary address
 	primaryAddress := customer.GetPrimaryAddress()
 	if primaryAddress == nil {
-		factor.Score = 30
+		factor.Score = LowSeverityScore
 		factor.Description = "No address information available"
 		factor.Severity = "medium"
 		return factor
@@ -430,15 +499,15 @@ func (s *FraudDetectionService) analyzeGeographicRisk(ctx context.Context, confi
 	// Check against high-risk countries
 	country := primaryAddress.Country
 	if contains(config.GeographicRules.HighRiskCountries, country) {
-		factor.Score = 60
+		factor.Score = MediumSeverityScore
 		factor.Description = fmt.Sprintf("Customer located in high-risk country: %s", country)
 		factor.Severity = "high"
 	} else if contains(config.GeographicRules.HighRiskRegions, primaryAddress.State) {
-		factor.Score = 40
+		factor.Score = ModerateSeverityScore
 		factor.Description = fmt.Sprintf("Customer located in high-risk region: %s", primaryAddress.State)
 		factor.Severity = "medium"
 	} else {
-		factor.Score = 20
+		factor.Score = VeryLowSeverityScore
 		factor.Description = "Customer located in standard risk area"
 		factor.Severity = "low"
 	}
@@ -465,15 +534,15 @@ func (s *FraudDetectionService) analyzeBehavioralPatterns(ctx context.Context, c
 	maxLength := config.BehavioralRules.MaxDescriptionLength
 
 	if descLength < minLength {
-		factor.Score = 50
+		factor.Score = ModerateSeverityScore
 		factor.Description = fmt.Sprintf("Very brief claim description (%d chars)", descLength)
 		factor.Severity = "medium"
 	} else if descLength > maxLength {
-		factor.Score = 30
+		factor.Score = LowSeverityScore
 		factor.Description = fmt.Sprintf("Extremely detailed claim description (%d chars)", descLength)
 		factor.Severity = "medium"
 	} else {
-		factor.Score = 10
+		factor.Score = MinimalSeverityScore
 		factor.Description = "Appropriate claim description length"
 		factor.Severity = "low"
 	}
@@ -481,10 +550,10 @@ func (s *FraudDetectionService) analyzeBehavioralPatterns(ctx context.Context, c
 	// Check customer tier (higher tier customers are generally more trustworthy)
 	tierLevel := customer.GetCustomerTierLevel()
 	if tierLevel >= 3 { // Gold or Platinum
-		factor.Score *= 0.8
+		factor.Score *= HighTierMultiplier
 		factor.Description += fmt.Sprintf("; Customer tier discount applied (%s)", customer.CustomerTier)
 	} else if tierLevel == 0 { // No tier assigned
-		factor.Score *= 1.2
+		factor.Score *= NoTierMultiplier
 		factor.Description += "; No customer tier assigned"
 	}
 
@@ -500,24 +569,25 @@ func (s *FraudDetectionService) analyzePolicyHistory(ctx context.Context, config
 
 	// Check policy age
 	policyAge := time.Since(policy.CreatedAt).Hours() / 24 / 365 // years
-	if policyAge < 0.25 {                                        // Less than 3 months
-		factor.Score = 60
+
+	if policyAge < PolicyAgeMonths { // Less than 3 months
+		factor.Score = NewAccountScore
 		factor.Description = "Very new policy"
 		factor.Severity = "high"
-	} else if policyAge < 1 {
-		factor.Score = 30
+	} else if policyAge < PolicyAgeYear {
+		factor.Score = RecentAccountScore
 		factor.Description = "Relatively new policy"
 		factor.Severity = "medium"
 	} else {
-		factor.Score = 10
+		factor.Score = EstablishedAccountScore
 		factor.Description = "Established policy"
 		factor.Severity = "low"
 	}
 
 	// Check if policy is close to expiration
 	daysToExpiration := policy.ExpirationDate.Sub(claim.IncidentDate).Hours() / 24
-	if daysToExpiration < 30 {
-		factor.Score += 20
+	if daysToExpiration < PolicyExpirationDays {
+		factor.Score += ModerateRiskAddition
 		factor.Description += "; Incident occurred near policy expiration"
 		if factor.Severity == "low" {
 			factor.Severity = "medium"
@@ -542,16 +612,16 @@ func (s *FraudDetectionService) calculateConfidence(ctx context.Context, config 
 
 	// Base confidence on total weight and number of factors
 	weightConfidence := totalWeight
-	if weightConfidence > 1.0 {
-		weightConfidence = 1.0
+	if weightConfidence > MaxConfidence {
+		weightConfidence = MaxConfidence
 	}
 
-	factorConfidence := float64(activeFactors) / 8.0 // Assuming 8 total factors
-	if factorConfidence > 1.0 {
-		factorConfidence = 1.0
+	factorConfidence := float64(activeFactors) / TotalFactors // Assuming 8 total factors
+	if factorConfidence > MaxConfidence {
+		factorConfidence = MaxConfidence
 	}
 
-	return (weightConfidence + factorConfidence) / 2.0
+	return (weightConfidence + factorConfidence) / ConfidenceDivisor
 }
 
 // determineRiskLevel determines the risk level based on the fraud score using configuration.
@@ -659,8 +729,8 @@ func (s *FraudDetectionService) UpdateFraudScore(ctx context.Context, claimID uu
 		return fmt.Errorf("fraud score cannot be nil")
 	}
 
-	if newScore.Score < 0 || newScore.Score > 100 {
-		return fmt.Errorf("fraud score must be between 0 and 100")
+	if newScore.Score < MinFraudScore || newScore.Score > MaxFraudScore {
+		return fmt.Errorf("fraud score must be between %.0f and %.0f", MinFraudScore, MaxFraudScore)
 	}
 
 	return nil

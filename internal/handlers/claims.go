@@ -61,8 +61,8 @@ func (h *ClaimHandler) ListClaims(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write response
-	if err := writePaginatedResponse(w, claims, total, pagination.Limit, pagination.Offset); err != nil {
+	// Write page-based paginated response
+	if err := writePagePaginatedResponse(w, r, claims, total, pagination.Page, pagination.PerPage); err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}
