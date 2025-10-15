@@ -228,7 +228,7 @@ func (h *QuoteHandler) ExpireQuote(w http.ResponseWriter, r *http.Request) {
 
 // RegisterRoutes registers quote routes with the router.
 func (h *QuoteHandler) RegisterRoutes(r chi.Router) {
-	r.Route("/v1/quotes", func(r chi.Router) {
+	r.Route("/quotes", func(r chi.Router) {
 		r.Get("/", h.ListQuotes)
 		r.Post("/", h.CreateQuote)
 		r.Get("/{id}", h.GetQuote)

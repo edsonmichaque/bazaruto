@@ -205,7 +205,7 @@ func (h *ClaimHandler) DeleteClaim(w http.ResponseWriter, r *http.Request) {
 
 // RegisterRoutes registers claim routes with the router.
 func (h *ClaimHandler) RegisterRoutes(r chi.Router) {
-	r.Route("/v1/claims", func(r chi.Router) {
+	r.Route("/claims", func(r chi.Router) {
 		r.Get("/", h.ListClaims)
 		r.Post("/", h.CreateClaim)
 		r.Get("/{id}", h.GetClaim)

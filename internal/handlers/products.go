@@ -171,7 +171,7 @@ func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 
 // RegisterRoutes registers product routes with the router.
 func (h *ProductHandler) RegisterRoutes(r chi.Router) {
-	r.Route("/v1/products", func(r chi.Router) {
+	r.Route("/products", func(r chi.Router) {
 		r.Get("/", h.ListProducts)
 		r.Post("/", h.CreateProduct)
 		r.Get("/{id}", h.GetProduct)

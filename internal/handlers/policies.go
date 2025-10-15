@@ -193,7 +193,7 @@ func (h *PolicyHandler) DeletePolicy(w http.ResponseWriter, r *http.Request) {
 
 // RegisterRoutes registers policy routes with the router.
 func (h *PolicyHandler) RegisterRoutes(r chi.Router) {
-	r.Route("/v1/policies", func(r chi.Router) {
+	r.Route("/policies", func(r chi.Router) {
 		r.Get("/", h.ListPolicies)
 		r.Post("/", h.CreatePolicy)
 		r.Get("/{id}", h.GetPolicy)
