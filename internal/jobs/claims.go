@@ -72,7 +72,7 @@ func (j *SettleClaimPayoutJob) Perform(ctx context.Context) error {
 
 // FraudDetectionJob interface methods
 func (j *FraudDetectionJob) Queue() string               { return job.QueueHeavy } // Fraud detection is resource-intensive
-func (j *FraudDetectionJob) MaxRetries() int             { return 2 }                      // Fraud detection is expensive, fewer retries
+func (j *FraudDetectionJob) MaxRetries() int             { return 2 }              // Fraud detection is expensive, fewer retries
 func (j *FraudDetectionJob) RetryBackoff() time.Duration { return 10 * time.Second }
 func (j *FraudDetectionJob) Priority() int               { return 0 }
 func (j *FraudDetectionJob) Type() string                { return "jobs.FraudDetectionJob" }
@@ -97,5 +97,3 @@ func (j *SettleClaimPayoutJob) GetAttempts() int            { return j.Attempts 
 func (j *SettleClaimPayoutJob) SetRunAt(t time.Time)        { j.RunAtTime = t }
 func (j *SettleClaimPayoutJob) GetRunAt() time.Time         { return j.RunAtTime }
 func (j *SettleClaimPayoutJob) Timeout() time.Duration      { return job.DefaultTimeout }
-
-

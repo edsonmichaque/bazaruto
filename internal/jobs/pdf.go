@@ -94,5 +94,3 @@ func (j *GeneratePolicyPDFJob) GetAttempts() int            { return j.Attempts 
 func (j *GeneratePolicyPDFJob) SetRunAt(t time.Time)        { j.RunAtTime = t }
 func (j *GeneratePolicyPDFJob) GetRunAt() time.Time         { return j.RunAtTime }
 func (j *GeneratePolicyPDFJob) Timeout() time.Duration      { return job.DefaultTimeout }
-
-

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/edsonmichaque/bazaruto/pkg/job"
 	"github.com/edsonmichaque/bazaruto/internal/logger"
 	"github.com/edsonmichaque/bazaruto/internal/services"
+	"github.com/edsonmichaque/bazaruto/pkg/job"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -55,5 +55,3 @@ func (j *ProcessPaymentJob) GetAttempts() int            { return j.Attempts }
 func (j *ProcessPaymentJob) SetRunAt(t time.Time)        { j.RunAtTime = t }
 func (j *ProcessPaymentJob) GetRunAt() time.Time         { return j.RunAtTime }
 func (j *ProcessPaymentJob) Timeout() time.Duration      { return job.DefaultTimeout }
-
-
