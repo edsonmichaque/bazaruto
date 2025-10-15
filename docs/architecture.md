@@ -1,7 +1,5 @@
 # Architecture Overview
 
-## System Architecture
-
 The Bazaruto Insurance Platform follows a layered architecture pattern with clear separation of concerns, inspired by Domain-Driven Design (DDD) principles and Rails/Laravel conventions.
 
 ## High-Level Architecture
@@ -12,12 +10,6 @@ graph TB
         WEB[Web Application]
         MOBILE[Mobile App]
         API_CLIENT[API Clients]
-    end
-    
-    subgraph "API Gateway Layer"
-        LB[Load Balancer]
-        RATE_LIMIT[Rate Limiter]
-        AUTH[Authentication]
     end
     
     subgraph "Application Layer"
@@ -42,402 +34,236 @@ graph TB
         REDIS[(Redis)]
         SMTP[Email Service]
         PAYMENT[Payment Gateway]
-        WEBHOOK[Webhook Endpoints]
     end
     
-    WEB --> LB
-    MOBILE --> LB
-    API_CLIENT --> LB
-    
-    LB --> RATE_LIMIT
-    RATE_LIMIT --> AUTH
-    AUTH --> ROUTER
+    WEB --> ROUTER
+    MOBILE --> ROUTER
+    API_CLIENT --> ROUTER
     
     ROUTER --> MIDDLEWARE
     MIDDLEWARE --> HANDLERS
-    
     HANDLERS --> SERVICES
     SERVICES --> STORE
-    SERVICES --> EVENTS
-    SERVICES --> JOBS
-    
     STORE --> GORM
     GORM --> DB
     
+    SERVICES --> EVENTS
+    SERVICES --> JOBS
     EVENTS --> REDIS
     JOBS --> REDIS
     SERVICES --> SMTP
     SERVICES --> PAYMENT
-    JOBS --> WEBHOOK
 ```
 
-## Layer Details
+## Layer Responsibilities
 
-### 1. Client Layer
-- **Web Application**: React/Vue.js frontend
-- **Mobile App**: iOS/Android applications
-- **API Clients**: Third-party integrations
+### 1. HTTP Layer
+- **Router**: Chi-based HTTP routing
+- **Handlers**: HTTP request/response handling
+- **Middleware**: Authentication, authorization, logging, rate limiting
 
-### 2. API Gateway Layer
-- **Load Balancer**: Distributes traffic across multiple instances
-- **Rate Limiter**: Token bucket algorithm with Redis backend
-- **Authentication**: JWT token validation and refresh
+### 2. Business Logic Layer
+- **Services**: Core business logic and domain operations
+- **Events**: Domain events and event-driven architecture
+- **Jobs**: Background job processing
 
-### 3. Application Layer
-- **Chi Router**: High-performance HTTP router
-- **Middleware Stack**: 
-  - Recovery middleware
-  - Logging middleware
-  - Authentication middleware
-  - Authorization middleware
-  - Rate limiting middleware
-  - Metrics middleware
-  - Tracing middleware
-- **HTTP Handlers**: Request/response handling with JSON helpers
+### 3. Data Layer
+- **Store**: Repository pattern for data access
+- **Models**: Domain entities and database models
+- **GORM**: Object-relational mapping
 
-### 4. Business Logic Layer
-- **Domain Services**: Core business logic
-  - UserService
-  - ProductService
-  - QuoteService
-  - PolicyService
-  - ClaimService
-  - PaymentService
-  - WebhookService
-- **Event Bus**: Domain event publishing and subscription
-- **Job System**: Background job processing with multiple queues
+## Key Design Patterns
 
-### 5. Data Layer
-- **Repository Layer**: Data access abstraction
-- **GORM ORM**: Object-relational mapping
-- **PostgreSQL**: Primary database with UUID primary keys
-
-### 6. External Services
-- **Redis**: Caching, sessions, and job queues
-- **Email Service**: SMTP/SendGrid integration
-- **Payment Gateway**: Stripe/PayPal integration
-- **Webhook Endpoints**: External system notifications
-
-## Domain Model
-
-```mermaid
-erDiagram
-    User ||--o{ Quote : creates
-    User ||--o{ Policy : owns
-    User ||--o{ Claim : submits
-    User ||--o{ Payment : makes
-    
-    Product ||--o{ Quote : generates
-    Product ||--o{ Policy : covers
-    
-    Quote ||--o| Policy : becomes
-    Quote ||--o{ Payment : requires
-    
-    Policy ||--o{ Claim : covers
-    Policy ||--o{ Subscription : has
-    
-    Claim ||--o{ Payment : receives
-    
-    User {
-        uuid id PK
-        string email
-        string full_name
-        string role
-        timestamp created_at
-        timestamp updated_at
-    }
-    
-    Product {
-        uuid id PK
-        string name
-        string category
-        decimal base_price
-        jsonb coverage_details
-        timestamp created_at
-        timestamp updated_at
-    }
-    
-    Quote {
-        uuid id PK
-        uuid user_id FK
-        uuid product_id FK
-        decimal final_price
-        string status
-        timestamp created_at
-        timestamp updated_at
-    }
-    
-    Policy {
-        uuid id PK
-        uuid user_id FK
-        uuid product_id FK
-        uuid quote_id FK
-        decimal premium
-        string status
-        timestamp start_date
-        timestamp end_date
-        timestamp created_at
-        timestamp updated_at
-    }
-    
-    Claim {
-        uuid id PK
-        uuid user_id FK
-        uuid policy_id FK
-        decimal amount
-        string status
-        string description
-        timestamp created_at
-        timestamp updated_at
-    }
-    
-    Payment {
-        uuid id PK
-        uuid user_id FK
-        uuid policy_id FK
-        decimal amount
-        string status
-        string transaction_id
-        timestamp created_at
-        timestamp updated_at
-    }
+### 1. Repository Pattern
+```go
+type UserStore interface {
+    Create(ctx context.Context, user *models.User) error
+    GetByID(ctx context.Context, id uuid.UUID) (*models.User, error)
+    Update(ctx context.Context, user *models.User) error
+    Delete(ctx context.Context, id uuid.UUID) error
+}
 ```
 
-## Event-Driven Architecture
+### 2. Service Layer Pattern
+```go
+type UserService struct {
+    userStore store.UserStore
+    eventBus  event.EventBus
+    logger    *logger.Logger
+}
 
-The platform uses an event-driven architecture for loose coupling and scalability:
+func (s *UserService) CreateUser(ctx context.Context, req *CreateUserRequest) (*models.User, error) {
+    // Business logic here
+    user := &models.User{...}
+    
+    if err := s.userStore.Create(ctx, user); err != nil {
+        return nil, err
+    }
+    
+    // Publish domain event
+    s.eventBus.Publish(ctx, events.NewUserCreatedEvent(user))
+    
+    return user, nil
+}
+```
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant H as Handler
-    participant S as Service
-    participant E as Event Bus
-    participant J as Job System
-    participant W as Webhook
-    
-    U->>H: Create Quote
-    H->>S: QuoteService.CreateQuote()
-    S->>S: Save to Database
-    S->>E: Publish QuoteCreatedEvent
-    E->>J: Dispatch CalculatePremiumJob
-    E->>J: Dispatch GenerateQuotePDFJob
-    E->>W: Send Webhook Notification
-    
-    Note over J: Background Processing
-    J->>S: Calculate Premium
-    J->>S: Generate PDF
-    J->>W: Deliver Webhook
+### 3. Event-Driven Architecture
+```go
+type EventHandler interface {
+    Handle(ctx context.Context, event Event) error
+    HandlerName() string
+}
+
+// Example: User registration triggers welcome email
+func (h *EmailHandler) Handle(ctx context.Context, event events.Event) error {
+    if userEvent, ok := event.(*events.UserCreatedEvent); ok {
+        return h.sendWelcomeEmail(ctx, userEvent.User)
+    }
+    return nil
+}
+```
+
+## Data Flow
+
+### 1. Request Processing Flow
+```
+HTTP Request → Router → Middleware → Handler → Service → Store → Database
+                     ↓
+                Event Bus → Event Handlers → Background Jobs
+```
+
+### 2. Event Processing Flow
+```
+Domain Event → Event Bus → Event Handlers → Background Jobs → External Services
+```
+
+## Configuration Architecture
+
+The platform uses a dual configuration system:
+
+### 1. Application Configuration (Viper)
+- Infrastructure settings (database, Redis, server)
+- Environment-specific configuration
+- Supports YAML, JSON, TOML, environment variables
+
+### 2. Business Rules Configuration (File-based)
+- Business logic configuration
+- Independent of database
+- JSON format with in-memory caching
+- Hot reloading support
+
+## Security Architecture
+
+### 1. Authentication Flow
+```
+Client → JWT Token → Middleware → Handler → Service
+```
+
+### 2. Authorization Flow
+```
+Request → RBAC Check → Policy Check → Resource Access
+```
+
+### 3. Rate Limiting
+```
+Request → Rate Limiter → Token Bucket → Allow/Deny
 ```
 
 ## Job System Architecture
 
-The job system supports multiple backends and provides reliable processing:
-
-```mermaid
-graph TB
-    subgraph "Job Dispatcher"
-        DISPATCHER[Job Dispatcher]
-        REGISTRY[Job Registry]
-    end
-    
-    subgraph "Queue Backends"
-        MEMORY[Memory Queue]
-        REDIS_Q[Redis Queue]
-        DB_Q[Database Queue]
-    end
-    
-    subgraph "Workers"
-        WORKER1[Worker Pool 1]
-        WORKER2[Worker Pool 2]
-        WORKER3[Worker Pool 3]
-    end
-    
-    subgraph "Job Types"
-        EMAIL[Email Jobs]
-        PAYMENT[Payment Jobs]
-        PDF[PDF Jobs]
-        WEBHOOK[Webhook Jobs]
-    end
-    
-    DISPATCHER --> REGISTRY
-    DISPATCHER --> MEMORY
-    DISPATCHER --> REDIS_Q
-    DISPATCHER --> DB_Q
-    
-    MEMORY --> WORKER1
-    REDIS_Q --> WORKER2
-    DB_Q --> WORKER3
-    
-    WORKER1 --> EMAIL
-    WORKER2 --> PAYMENT
-    WORKER3 --> PDF
-    WORKER3 --> WEBHOOK
+### 1. Job Processing Flow
+```
+Job Creation → Queue → Worker → Processing → Completion/Failure
 ```
 
-## Security Architecture
+### 2. Queue Management
+- Multiple queue backends (Memory, Redis, Database)
+- Priority-based job processing
+- Retry mechanisms with exponential backoff
+- Dead letter queue for failed jobs
 
-```mermaid
-graph TB
-    subgraph "Authentication"
-        JWT[JWT Tokens]
-        REFRESH[Refresh Tokens]
-        MFA[MFA Support]
-    end
-    
-    subgraph "Authorization"
-        RBAC[Role-Based Access Control]
-        POLICIES[Resource Policies]
-        GATES[Custom Gates]
-    end
-    
-    subgraph "Security Middleware"
-        RATE_LIMIT[Rate Limiting]
-        CORS[CORS Protection]
-        VALIDATION[Input Validation]
-        SANITIZATION[Data Sanitization]
-    end
-    
-    JWT --> RBAC
-    REFRESH --> JWT
-    MFA --> JWT
-    
-    RBAC --> POLICIES
-    POLICIES --> GATES
-    
-    RATE_LIMIT --> VALIDATION
-    CORS --> SANITIZATION
-```
+## Monitoring and Observability
+
+### 1. Logging
+- Structured logging with Zap
+- Request/response logging
+- Correlation IDs for tracing
+
+### 2. Metrics
+- Prometheus metrics
+- Custom business metrics
+- HTTP and database metrics
+
+### 3. Tracing
+- OpenTelemetry integration
+- Distributed tracing
+- Custom spans for business logic
 
 ## Deployment Architecture
 
-```mermaid
-graph TB
-    subgraph "Load Balancer"
-        LB[NGINX/HAProxy]
-    end
-    
-    subgraph "Application Tier"
-        APP1[App Instance 1]
-        APP2[App Instance 2]
-        APP3[App Instance 3]
-    end
-    
-    subgraph "Data Tier"
-        DB_MASTER[(PostgreSQL Master)]
-        DB_REPLICA[(PostgreSQL Replica)]
-        REDIS_CLUSTER[(Redis Cluster)]
-    end
-    
-    subgraph "Monitoring"
-        PROMETHEUS[Prometheus]
-        GRAFANA[Grafana]
-        JAEGER[Jaeger]
-    end
-    
-    LB --> APP1
-    LB --> APP2
-    LB --> APP3
-    
-    APP1 --> DB_MASTER
-    APP2 --> DB_MASTER
-    APP3 --> DB_MASTER
-    
-    APP1 --> DB_REPLICA
-    APP2 --> DB_REPLICA
-    APP3 --> DB_REPLICA
-    
-    APP1 --> REDIS_CLUSTER
-    APP2 --> REDIS_CLUSTER
-    APP3 --> REDIS_CLUSTER
-    
-    APP1 --> PROMETHEUS
-    APP2 --> PROMETHEUS
-    APP3 --> PROMETHEUS
-    
-    PROMETHEUS --> GRAFANA
-    APP1 --> JAEGER
-    APP2 --> JAEGER
-    APP3 --> JAEGER
+### 1. Container Architecture
+```
+Docker Container → Application → Dependencies (PostgreSQL, Redis)
 ```
 
-## Key Design Principles
-
-### 1. Separation of Concerns
-- Each layer has a specific responsibility
-- Clear boundaries between layers
-- Dependency injection for testability
-
-### 2. Domain-Driven Design
-- Business logic encapsulated in services
-- Rich domain models
-- Event-driven communication
-
-### 3. SOLID Principles
-- Single Responsibility Principle
-- Open/Closed Principle
-- Liskov Substitution Principle
-- Interface Segregation Principle
-- Dependency Inversion Principle
-
-### 4. Clean Architecture
-- Independent of frameworks
-- Testable business logic
-- Independent of UI
-- Independent of database
-- Independent of external services
-
-### 5. Event-Driven Architecture
-- Loose coupling between components
-- Scalable and maintainable
-- Asynchronous processing
-- Event sourcing capabilities
-
-## Technology Stack
-
-### Backend
-- **Language**: Go 1.22+
-- **Framework**: Chi v5 (HTTP router)
-- **ORM**: GORM v2
-- **Database**: PostgreSQL 14+
-- **Cache**: Redis 6+
-- **Authentication**: JWT with refresh tokens
-- **Logging**: Zap (structured logging)
-- **Metrics**: Prometheus
-- **Tracing**: OpenTelemetry + Jaeger
-
-### Infrastructure
-- **Containerization**: Docker
-- **Orchestration**: Kubernetes
-- **CI/CD**: GitHub Actions
-- **Monitoring**: Prometheus + Grafana
-- **Log Aggregation**: ELK Stack (optional)
-
-### External Services
-- **Email**: SMTP/SendGrid
-- **Payments**: Stripe/PayPal
-- **File Storage**: AWS S3 (optional)
-- **CDN**: CloudFlare (optional)
+### 2. Kubernetes Architecture
+```
+Ingress → Service → Deployment → Pods → Persistent Volumes
+```
 
 ## Scalability Considerations
 
-### Horizontal Scaling
-- Stateless application instances
+### 1. Horizontal Scaling
+- Stateless application design
+- External session storage (Redis)
 - Load balancer distribution
-- Database read replicas
-- Redis clustering
 
-### Performance Optimization
+### 2. Database Scaling
 - Connection pooling
+- Read replicas support
 - Query optimization
-- Caching strategies
-- Background job processing
 
-### Monitoring and Observability
-- Application metrics
-- Business metrics
-- Distributed tracing
-- Health checks
-- Alerting
+### 3. Job Processing Scaling
+- Multiple worker instances
+- Queue partitioning
+- Worker specialization
 
-This architecture provides a solid foundation for building a scalable, maintainable, and secure insurance platform.
+## Technology Stack
+
+### Core Technologies
+- **Language**: Go 1.22+
+- **Web Framework**: Chi router
+- **Database**: PostgreSQL 14+
+- **Cache**: Redis 6+
+- **ORM**: GORM
+
+### Supporting Technologies
+- **Authentication**: JWT
+- **Logging**: Zap
+- **Metrics**: Prometheus
+- **Tracing**: OpenTelemetry
+- **Containerization**: Docker
+- **Orchestration**: Kubernetes
+
+## Development Principles
+
+### 1. Clean Architecture
+- Separation of concerns
+- Dependency inversion
+- Testable design
+
+### 2. Domain-Driven Design
+- Business logic in services
+- Domain events
+- Repository pattern
+
+### 3. SOLID Principles
+- Single responsibility
+- Open/closed principle
+- Dependency inversion
+
+### 4. Go Best Practices
+- Interface-based design
+- Error handling
+- Context propagation
+- Goroutine management

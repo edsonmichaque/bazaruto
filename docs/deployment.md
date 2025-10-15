@@ -14,176 +14,125 @@ This guide covers deploying the Bazaruto Insurance Platform in various environme
 
 ### Using Docker Compose
 
-1. **Clone the repository**
+1. **Clone and setup**
    ```bash
-   git clone https://github.com/edsonmichaque/bazaruto.git
-   cd bazaruto
-   ```
-
-2. **Start dependencies**
-   ```bash
+   git clone https://github.com/edsonmichaque/bazaruto-insurance.git
+   cd bazaruto-insurance
    docker-compose up -d postgres redis
    ```
 
-3. **Run migrations**
+2. **Run migrations and start**
    ```bash
-   make migrate
-   # or
    go run cmd/bazarutod/main.go migrate
-   ```
-
-4. **Start the application**
-   ```bash
-   make run
-   # or
    go run cmd/bazarutod/main.go serve
    ```
 
 ### Using Local Services
 
 1. **Install PostgreSQL and Redis locally**
-
 2. **Create database**
    ```sql
    CREATE DATABASE bazaruto;
    ```
-
-3. **Configure environment**
+3. **Configure and run**
    ```bash
-   export BAZARUTO_DB_HOST=localhost
-   export BAZARUTO_DB_NAME=bazaruto
-   export BAZARUTO_DB_USER=postgres
-   export BAZARUTO_DB_PASSWORD=password
-   export BAZARUTO_REDIS_ADDRESS=localhost:6379
-   ```
-
-4. **Run the application**
-   ```bash
+   cp config.yaml.example config.yaml
+   # Edit config.yaml with your settings
+   go run cmd/bazarutod/main.go migrate
    go run cmd/bazarutod/main.go serve
    ```
 
 ## Docker Deployment
 
-### Building Docker Image
+### Build and Run
 
 ```bash
-# Build the image
+# Build Docker image
 docker build -t bazaruto:latest .
 
-# Build with specific tag
-docker build -t bazaruto:v1.0.0 .
+# Run with Docker Compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f bazarutod
 ```
 
-### Docker Compose Deployment
+### Docker Compose Configuration
 
 ```yaml
-# docker-compose.yml
 version: '3.8'
-
 services:
-  app:
+  bazarutod:
     build: .
     ports:
       - "8080:8080"
     environment:
       - BAZARUTO_DB_HOST=postgres
-      - BAZARUTO_DB_NAME=bazaruto
-      - BAZARUTO_DB_USER=postgres
-      - BAZARUTO_DB_PASSWORD=password
       - BAZARUTO_REDIS_ADDRESS=redis:6379
     depends_on:
       - postgres
       - redis
-    restart: unless-stopped
+    volumes:
+      - ./config:/app/config
 
   postgres:
     image: postgres:14
     environment:
-      - POSTGRES_DB=bazaruto
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      POSTGRES_DB: bazaruto
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    restart: unless-stopped
 
   redis:
     image: redis:6-alpine
     ports:
       - "6379:6379"
-    restart: unless-stopped
 
 volumes:
   postgres_data:
 ```
 
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f app
-
-# Stop services
-docker-compose down
-```
-
-### Production Docker Compose
-
-```yaml
-# docker-compose.prod.yml
-version: '3.8'
-
-services:
-  app:
-    image: bazaruto:latest
-    ports:
-      - "8080:8080"
-    environment:
-      - BAZARUTO_DB_HOST=${DB_HOST}
-      - BAZARUTO_DB_NAME=${DB_NAME}
-      - BAZARUTO_DB_USER=${DB_USER}
-      - BAZARUTO_DB_PASSWORD=${DB_PASSWORD}
-      - BAZARUTO_REDIS_ADDRESS=${REDIS_ADDRESS}
-      - BAZARUTO_REDIS_PASSWORD=${REDIS_PASSWORD}
-      - BAZARUTO_AUTH_JWT_SECRET=${JWT_SECRET}
-      - BAZARUTO_LOG_LEVEL=info
-      - BAZARUTO_METRICS_ENABLED=true
-      - BAZARUTO_TRACING_ENABLED=true
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    deploy:
-      replicas: 3
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
-```
-
 ## Kubernetes Deployment
 
-### Namespace
+### Prerequisites
 
+- Kubernetes cluster (1.20+)
+- kubectl configured
+- Helm (optional)
+
+### Deploy with kubectl
+
+```bash
+# Create namespace
+kubectl create namespace bazaruto
+
+# Apply configurations
+kubectl apply -f deploy/kubernetes/namespace.yaml
+kubectl apply -f deploy/kubernetes/configmap.yaml
+kubectl apply -f deploy/kubernetes/deployment.yaml
+kubectl apply -f deploy/kubernetes/service.yaml
+kubectl apply -f deploy/kubernetes/ingress.yaml
+
+# Check deployment
+kubectl get pods -n bazaruto
+kubectl get services -n bazaruto
+```
+
+### Kubernetes Manifests
+
+#### Namespace
 ```yaml
-# k8s/namespace.yaml
 apiVersion: v1
 kind: Namespace
 metadata:
   name: bazaruto
 ```
 
-### ConfigMap
-
+#### ConfigMap
 ```yaml
-# k8s/configmap.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -193,102 +142,41 @@ data:
   config.yaml: |
     server:
       addr: ":8080"
-      read_timeout: 30s
-      write_timeout: 30s
-    
     db:
       host: postgres-service
       port: 5432
       name: bazaruto
-      user: postgres
-      ssl_mode: require
-    
     redis:
       address: redis-service:6379
-    
-    log_level: info
-    log_format: json
-    metrics_enabled: true
-    tracing:
-      enabled: true
-      service_name: bazaruto
-      endpoint: http://jaeger:14268/api/traces
 ```
 
-### Secrets
-
+#### Deployment
 ```yaml
-# k8s/secrets.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: bazaruto-secrets
-  namespace: bazaruto
-type: Opaque
-data:
-  db-password: <base64-encoded-password>
-  redis-password: <base64-encoded-password>
-  jwt-secret: <base64-encoded-secret>
-  email-password: <base64-encoded-password>
-  payment-secret: <base64-encoded-secret>
-```
-
-### Deployment
-
-```yaml
-# k8s/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: bazaruto
+  name: bazarutod
   namespace: bazaruto
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: bazaruto
+      app: bazarutod
   template:
     metadata:
       labels:
-        app: bazaruto
+        app: bazarutod
     spec:
       containers:
-      - name: bazaruto
+      - name: bazarutod
         image: bazaruto:latest
         ports:
         - containerPort: 8080
         env:
-        - name: BAZARUTO_DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: bazaruto-secrets
-              key: db-password
-        - name: BAZARUTO_REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: bazaruto-secrets
-              key: redis-password
-        - name: BAZARUTO_AUTH_JWT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: bazaruto-secrets
-              key: jwt-secret
-        volumeMounts:
-        - name: config
-          mountPath: /app/config.yaml
-          subPath: config.yaml
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
+        - name: BAZARUTO_DB_HOST
+          value: "postgres-service"
+        - name: BAZARUTO_REDIS_ADDRESS
+          value: "redis-service:6379"
         resources:
           requests:
             memory: "256Mi"
@@ -296,48 +184,34 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
-      volumes:
-      - name: config
-        configMap:
-          name: bazaruto-config
 ```
 
-### Service
-
+#### Service
 ```yaml
-# k8s/service.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: bazaruto-service
+  name: bazarutod-service
   namespace: bazaruto
 spec:
   selector:
-    app: bazaruto
+    app: bazarutod
   ports:
   - port: 80
     targetPort: 8080
   type: ClusterIP
 ```
 
-### Ingress
-
+#### Ingress
 ```yaml
-# k8s/ingress.yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: bazaruto-ingress
+  name: bazarutod-ingress
   namespace: bazaruto
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
-  tls:
-  - hosts:
-    - api.bazaruto.com
-    secretName: bazaruto-tls
   rules:
   - host: api.bazaruto.com
     http:
@@ -346,253 +220,126 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: bazaruto-service
+            name: bazarutod-service
             port:
               number: 80
 ```
 
-### Horizontal Pod Autoscaler
+## Production Deployment
 
-```yaml
-# k8s/hpa.yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: bazaruto-hpa
-  namespace: bazaruto
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: bazaruto
-  minReplicas: 3
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
-```
+### Environment Setup
 
-### Deploy to Kubernetes
-
-```bash
-# Apply all manifests
-kubectl apply -f k8s/
-
-# Check deployment status
-kubectl get pods -n bazaruto
-
-# View logs
-kubectl logs -f deployment/bazaruto -n bazaruto
-
-# Scale deployment
-kubectl scale deployment bazaruto --replicas=5 -n bazaruto
-```
-
-## Cloud Deployment
-
-### AWS EKS
-
-1. **Create EKS cluster**
+1. **Database Setup**
    ```bash
-   eksctl create cluster --name bazaruto-cluster --region us-west-2
+   # Use managed PostgreSQL service (AWS RDS, Google Cloud SQL, etc.)
+   # Configure connection pooling
+   # Set up read replicas for scaling
    ```
 
-2. **Deploy application**
+2. **Redis Setup**
    ```bash
-   kubectl apply -f k8s/
+   # Use managed Redis service (AWS ElastiCache, Google Cloud Memorystore, etc.)
+   # Configure clustering for high availability
    ```
 
-3. **Configure load balancer**
+3. **Load Balancer**
    ```bash
-   kubectl apply -f k8s/aws-load-balancer.yaml
+   # Configure load balancer (AWS ALB, Google Cloud Load Balancer, etc.)
+   # Set up SSL/TLS termination
+   # Configure health checks
    ```
 
-### Google GKE
+### Configuration
 
-1. **Create GKE cluster**
+1. **Environment Variables**
    ```bash
-   gcloud container clusters create bazaruto-cluster --zone us-central1-a
+   export BAZARUTO_SERVER_ADDR=":8080"
+   export BAZARUTO_DB_HOST="production-db.example.com"
+   export BAZARUTO_DB_PASSWORD="secure-password"
+   export BAZARUTO_REDIS_ADDRESS="production-redis.example.com:6379"
+   export BAZARUTO_JWT_SECRET="very-secure-secret"
+   export BAZARUTO_LOG_LEVEL="info"
    ```
 
-2. **Deploy application**
+2. **Business Rules Configuration**
    ```bash
-   kubectl apply -f k8s/
+   # Create environment-specific business rules
+   cp config/business_rules.json config/production.json
+   # Edit production.json with production values
    ```
 
-3. **Configure ingress**
+### Monitoring Setup
+
+1. **Prometheus Metrics**
+   ```yaml
+   # Add to deployment
+   - name: metrics
+     containerPort: 9090
+   ```
+
+2. **Logging**
    ```bash
-   kubectl apply -f k8s/gke-ingress.yaml
+   # Configure log aggregation (ELK stack, Fluentd, etc.)
+   # Set up log rotation
+   # Configure log levels
    ```
 
-### Azure AKS
-
-1. **Create AKS cluster**
+3. **Tracing**
    ```bash
-   az aks create --resource-group bazaruto-rg --name bazaruto-cluster
+   # Set up Jaeger or similar tracing system
+   # Configure sampling rates
+   # Set up alerting
    ```
 
-2. **Deploy application**
+### Security Considerations
+
+1. **Network Security**
+   - Use private subnets for databases
+   - Configure security groups/firewalls
+   - Enable VPC endpoints
+
+2. **Secrets Management**
+   - Use Kubernetes secrets or external secret management
+   - Rotate secrets regularly
+   - Encrypt secrets at rest
+
+3. **SSL/TLS**
+   - Use Let's Encrypt or similar for certificates
+   - Configure HSTS headers
+   - Use strong cipher suites
+
+## Scaling
+
+### Horizontal Scaling
+
+1. **Application Scaling**
    ```bash
-   kubectl apply -f k8s/
+   # Scale deployment
+   kubectl scale deployment bazarutod --replicas=5 -n bazaruto
    ```
 
-## Database Setup
+2. **Database Scaling**
+   - Set up read replicas
+   - Configure connection pooling
+   - Use database sharding if needed
 
-### PostgreSQL
-
-1. **Create database**
-   ```sql
-   CREATE DATABASE bazaruto;
-   CREATE USER bazaruto_user WITH PASSWORD 'secure_password';
-   GRANT ALL PRIVILEGES ON DATABASE bazaruto TO bazaruto_user;
-   ```
-
-2. **Run migrations**
+3. **Job Processing Scaling**
    ```bash
-   go run cmd/bazarutod/main.go migrate
+   # Scale job workers
+   kubectl scale deployment bazarutod-workers --replicas=10 -n bazaruto
    ```
 
-3. **Set up replication (production)**
-   ```sql
-   -- Master configuration
-   ALTER SYSTEM SET wal_level = replica;
-   ALTER SYSTEM SET max_wal_senders = 3;
-   ALTER SYSTEM SET max_replication_slots = 3;
-   
-   -- Create replication user
-   CREATE USER replicator WITH REPLICATION ENCRYPTED PASSWORD 'replication_password';
-   ```
+### Vertical Scaling
 
-### Redis
-
-1. **Basic setup**
-   ```bash
-   # Start Redis
-   redis-server
-   
-   # Test connection
-   redis-cli ping
-   ```
-
-2. **Production setup with clustering**
-   ```bash
-   # Redis cluster configuration
-   redis-server --port 7000 --cluster-enabled yes --cluster-config-file nodes-7000.conf
-   redis-server --port 7001 --cluster-enabled yes --cluster-config-file nodes-7001.conf
-   redis-server --port 7002 --cluster-enabled yes --cluster-config-file nodes-7002.conf
-   ```
-
-## Monitoring Setup
-
-### Prometheus
-
-```yaml
-# monitoring/prometheus.yml
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-- job_name: 'bazaruto'
-  static_configs:
-  - targets: ['bazaruto-service:80']
-  metrics_path: /metrics
-  scrape_interval: 5s
-```
-
-### Grafana
-
-```yaml
-# monitoring/grafana-dashboard.json
-{
-  "dashboard": {
-    "title": "Bazaruto Platform",
-    "panels": [
-      {
-        "title": "Request Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(http_requests_total[5m])"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-### Jaeger
-
-```yaml
-# monitoring/jaeger.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: jaeger
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: jaeger
-  template:
-    metadata:
-      labels:
-        app: jaeger
-    spec:
-      containers:
-      - name: jaeger
-        image: jaegertracing/all-in-one:latest
-        ports:
-        - containerPort: 16686
-        - containerPort: 14268
-        env:
-        - name: COLLECTOR_OTLP_ENABLED
-          value: "true"
-```
-
-## Security Considerations
-
-### Network Security
-
-1. **Firewall rules**
-   ```bash
-   # Allow only necessary ports
-   ufw allow 22/tcp    # SSH
-   ufw allow 80/tcp    # HTTP
-   ufw allow 443/tcp   # HTTPS
-   ufw deny 5432/tcp   # PostgreSQL (internal only)
-   ufw deny 6379/tcp   # Redis (internal only)
-   ```
-
-2. **TLS/SSL certificates**
-   ```bash
-   # Using Let's Encrypt
-   certbot --nginx -d api.bazaruto.com
-   ```
-
-### Application Security
-
-1. **Environment variables**
-   ```bash
-   # Use secrets management
-   export BAZARUTO_AUTH_JWT_SECRET=$(aws secretsmanager get-secret-value --secret-id bazaruto/jwt-secret --query SecretString --output text)
-   ```
-
-2. **Database security**
-   ```sql
-   -- Create read-only user for monitoring
-   CREATE USER bazaruto_monitor WITH PASSWORD 'monitor_password';
-   GRANT SELECT ON ALL TABLES IN SCHEMA public TO bazaruto_monitor;
+1. **Resource Limits**
+   ```yaml
+   resources:
+     requests:
+       memory: "512Mi"
+       cpu: "500m"
+     limits:
+       memory: "1Gi"
+       cpu: "1000m"
    ```
 
 ## Backup and Recovery
@@ -600,74 +347,71 @@ spec:
 ### Database Backup
 
 ```bash
-# Create backup
-pg_dump -h localhost -U postgres bazaruto > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# Restore backup
-psql -h localhost -U postgres bazaruto < backup_20240101_120000.sql
+# Automated backup script
+#!/bin/bash
+pg_dump -h $DB_HOST -U $DB_USER -d $DB_NAME > backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
-### Automated Backups
+### Configuration Backup
 
 ```bash
-#!/bin/bash
-# backup.sh
-DATE=$(date +%Y%m%d_%H%M%S)
-pg_dump -h $DB_HOST -U $DB_USER $DB_NAME | gzip > /backups/backup_$DATE.sql.gz
-aws s3 cp /backups/backup_$DATE.sql.gz s3://bazaruto-backups/
+# Backup business rules configuration
+cp config/production.json backups/production_$(date +%Y%m%d_%H%M%S).json
 ```
+
+### Disaster Recovery
+
+1. **RTO/RPO Requirements**
+   - Recovery Time Objective: 4 hours
+   - Recovery Point Objective: 1 hour
+
+2. **Recovery Procedures**
+   - Database restore from backup
+   - Application deployment
+   - Configuration restoration
+   - Health checks and validation
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Database connection issues**
+1. **Database Connection Issues**
    ```bash
    # Check database connectivity
-   telnet $DB_HOST $DB_PORT
-   
-   # Check database logs
-   docker logs postgres
+   kubectl exec -it bazarutod-pod -- nc -zv postgres-service 5432
    ```
 
-2. **Redis connection issues**
+2. **Redis Connection Issues**
    ```bash
    # Check Redis connectivity
-   redis-cli -h $REDIS_HOST -p $REDIS_PORT ping
-   
-   # Check Redis logs
-   docker logs redis
+   kubectl exec -it bazarutod-pod -- redis-cli -h redis-service ping
    ```
 
-3. **Application startup issues**
-   ```bash
-   # Check application logs
-   kubectl logs -f deployment/bazaruto -n bazaruto
-   
-   # Check configuration
-   kubectl describe configmap bazaruto-config -n bazaruto
-   ```
-
-### Performance Issues
-
-1. **High memory usage**
+3. **Memory Issues**
    ```bash
    # Check memory usage
    kubectl top pods -n bazaruto
-   
-   # Adjust resource limits
-   kubectl patch deployment bazaruto -n bazaruto -p '{"spec":{"template":{"spec":{"containers":[{"name":"bazaruto","resources":{"limits":{"memory":"1Gi"}}}]}}}}'
    ```
 
-2. **Database performance**
-   ```sql
-   -- Check slow queries
-   SELECT query, mean_time, calls 
-   FROM pg_stat_statements 
-   ORDER BY mean_time DESC 
-   LIMIT 10;
-   ```
+### Health Checks
 
-For more detailed troubleshooting, refer to the [Operations Guide](ops-guide.md).
+```bash
+# Application health
+curl http://localhost:8080/healthz
 
+# Database health
+curl http://localhost:8080/healthz/db
 
+# Redis health
+curl http://localhost:8080/healthz/redis
+```
+
+### Logs
+
+```bash
+# Application logs
+kubectl logs -f deployment/bazarutod -n bazaruto
+
+# Job worker logs
+kubectl logs -f deployment/bazarutod-workers -n bazaruto
+```

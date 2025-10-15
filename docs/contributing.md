@@ -2,22 +2,6 @@
 
 Thank you for your interest in contributing to the Bazaruto Insurance Platform! This guide will help you get started with contributing to the project.
 
-## Table of Contents
-
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Setup](#development-setup)
-- [Contributing Process](#contributing-process)
-- [Code Standards](#code-standards)
-- [Testing](#testing)
-- [Documentation](#documentation)
-- [Pull Request Process](#pull-request-process)
-- [Issue Guidelines](#issue-guidelines)
-
-## Code of Conduct
-
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold this code.
-
 ## Getting Started
 
 ### Prerequisites
@@ -27,20 +11,19 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 - Docker and Docker Compose
 - PostgreSQL 14+
 - Redis 6+
-- Make
 
 ### Fork and Clone
 
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/your-username/bazaruto.git
-   cd bazaruto
+   git clone https://github.com/your-username/bazaruto-insurance.git
+   cd bazaruto-insurance
    ```
 
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/edsonmichaque/bazaruto.git
+   git remote add upstream https://github.com/edsonmichaque/bazaruto-insurance.git
    ```
 
 ## Development Setup
@@ -48,43 +31,32 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 ### 1. Install Dependencies
 
 ```bash
-# Install Go dependencies
 go mod download
-
-# Install development tools
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
-go install github.com/air-verse/air@latest
 ```
 
-### 2. Set Up Environment
+### 2. Start Dependencies
 
 ```bash
-# Copy configuration template
-cp config.yaml.example config.yaml
-
-# Edit configuration
-nano config.yaml
-```
-
-### 3. Start Dependencies
-
-```bash
-# Start PostgreSQL and Redis
 docker-compose up -d postgres redis
-
-# Run database migrations
-make migrate
 ```
 
-### 4. Run the Application
+### 3. Configure Application
 
 ```bash
-# Development mode with hot reload
-make dev
+cp config.yaml.example config.yaml
+# Edit config.yaml with your settings
+```
 
-# Or run directly
-make run
+### 4. Run Migrations
+
+```bash
+go run cmd/bazarutod/main.go migrate
+```
+
+### 5. Start Development Server
+
+```bash
+go run cmd/bazarutod/main.go serve
 ```
 
 ## Contributing Process
@@ -92,114 +64,76 @@ make run
 ### 1. Create a Branch
 
 ```bash
-# Create a new branch for your feature
 git checkout -b feature/your-feature-name
-
-# Or for bug fixes
-git checkout -b fix/your-bug-description
+# or
+git checkout -b fix/your-bug-fix
 ```
 
 ### 2. Make Changes
 
-- Write your code following the [Code Standards](#code-standards)
+- Write clean, readable code
+- Follow Go best practices
 - Add tests for new functionality
 - Update documentation as needed
-- Ensure all tests pass
 
-### 3. Commit Changes
-
-Use [Conventional Commits](https://www.conventionalcommits.org/) format:
+### 3. Test Your Changes
 
 ```bash
-# Feature
-git commit -m "feat: add webhook retry mechanism"
+# Run all tests
+go test ./...
 
-# Bug fix
-git commit -m "fix: resolve memory leak in job processing"
+# Run specific tests
+go test ./internal/services/...
 
-# Documentation
-git commit -m "docs: update API documentation"
-
-# Refactoring
-git commit -m "refactor: improve error handling"
-
-# Performance
-git commit -m "perf: optimize database queries"
+# Run with coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
 ```
 
-### 4. Push and Create Pull Request
+### 4. Commit Your Changes
 
 ```bash
-# Push your branch
+git add .
+git commit -m "feat: add new feature"
+# or
+git commit -m "fix: resolve bug in user service"
+```
+
+### 5. Push and Create Pull Request
+
+```bash
 git push origin feature/your-feature-name
-
-# Create pull request on GitHub
 ```
+
+Then create a pull request on GitHub.
 
 ## Code Standards
 
 ### Go Code Style
 
-We follow the standard Go formatting and style guidelines:
+- Follow [Effective Go](https://golang.org/doc/effective_go.html)
+- Use `gofmt` and `goimports` for formatting
+- Follow the project's existing code patterns
+- Use meaningful variable and function names
 
-```bash
-# Format code
-make fmt
+### Project Structure
 
-# Lint code
-make lint
-
-# Run security scan
-make security
-```
-
-### Code Organization
-
-Follow the established project structure:
-
-```
-internal/
-├── authentication/    # Authentication logic
-├── authorization/     # Authorization logic
-├── commands/          # CLI commands
-├── config/           # Configuration management
-├── events/           # Event bus system
-├── handlers/         # HTTP handlers
-├── job/              # Job system core
-├── jobs/             # Job implementations
-├── logger/           # Logging utilities
-├── middleware/       # HTTP middleware
-├── models/           # Domain models
-├── services/         # Business logic
-├── store/            # Data access layer
-└── router/           # HTTP routing
-```
-
-### Naming Conventions
-
-- **Packages**: lowercase, single word
-- **Files**: snake_case
-- **Types**: PascalCase
-- **Functions**: PascalCase (exported), camelCase (private)
-- **Variables**: camelCase
-- **Constants**: PascalCase or UPPER_SNAKE_CASE
+- Keep business logic in the `services` layer
+- Use the repository pattern in the `store` layer
+- Handle HTTP requests in the `handlers` layer
+- Use middleware for cross-cutting concerns
 
 ### Error Handling
 
 ```go
-// Good: Wrap errors with context
+// Good
 if err != nil {
     return fmt.Errorf("failed to create user: %w", err)
 }
 
-// Good: Use custom error types
-type ValidationError struct {
-    Field   string
-    Message string
-}
-
-func (e ValidationError) Error() string {
-    return fmt.Sprintf("validation failed for field %s: %s", e.Field, e.Message)
+// Bad
+if err != nil {
+    return err
 }
 ```
 
@@ -207,159 +141,91 @@ func (e ValidationError) Error() string {
 
 ```go
 // Use structured logging
-logger.Info("User created successfully",
+s.logger.Info("User created successfully",
     zap.String("user_id", user.ID.String()),
     zap.String("email", user.Email))
-
-logger.Error("Failed to process payment",
-    zap.Error(err),
-    zap.String("payment_id", payment.ID.String()))
-```
-
-### Database Operations
-
-```go
-// Use transactions for multiple operations
-func (s *UserService) CreateUserWithProfile(ctx context.Context, user *models.User, profile *models.Profile) error {
-    return s.db.Transaction(func(tx *gorm.DB) error {
-        if err := tx.Create(user).Error; err != nil {
-            return fmt.Errorf("failed to create user: %w", err)
-        }
-        
-        profile.UserID = user.ID
-        if err := tx.Create(profile).Error; err != nil {
-            return fmt.Errorf("failed to create profile: %w", err)
-        }
-        
-        return nil
-    })
-}
 ```
 
 ## Testing
 
-### Test Structure
+### Unit Tests
 
 ```go
 func TestUserService_CreateUser(t *testing.T) {
-    tests := []struct {
-        name    string
-        user    *models.User
-        wantErr bool
-        errMsg  string
-    }{
-        {
-            name: "valid user",
-            user: &models.User{
-                Email:    "test@example.com",
-                FullName: "Test User",
-            },
-            wantErr: false,
-        },
-        {
-            name: "invalid email",
-            user: &models.User{
-                Email:    "invalid-email",
-                FullName: "Test User",
-            },
-            wantErr: true,
-            errMsg:  "invalid email format",
-        },
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            // Test implementation
-        })
-    }
+    // Arrange
+    mockStore := &MockUserStore{}
+    service := NewUserService(mockStore, logger, eventBus)
+    
+    // Act
+    user, err := service.CreateUser(ctx, req)
+    
+    // Assert
+    assert.NoError(t, err)
+    assert.NotNil(t, user)
 }
 ```
 
-### Running Tests
+### Integration Tests
 
-```bash
-# Run all tests
-make test
-
-# Run specific package tests
-go test ./internal/services/...
-
-# Run tests with coverage
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-
-# Run integration tests
-go test ./test/integration/...
-
-# Run E2E tests
-go test ./test/e2e/...
+```go
+func TestUserAPI_CreateUser(t *testing.T) {
+    // Setup test database
+    db := setupTestDB(t)
+    defer cleanupTestDB(t, db)
+    
+    // Test API endpoint
+    req := httptest.NewRequest("POST", "/users", body)
+    w := httptest.NewRecorder()
+    
+    handler.ServeHTTP(w, req)
+    
+    assert.Equal(t, http.StatusCreated, w.Code)
+}
 ```
 
-### Test Requirements
+### Test Coverage
 
-- **Unit Tests**: > 80% coverage
-- **Integration Tests**: Cover all external dependencies
-- **E2E Tests**: Cover critical user journeys
-- **Performance Tests**: For performance-critical code
+- Aim for at least 80% test coverage
+- Focus on business logic and critical paths
+- Test error conditions and edge cases
 
 ## Documentation
 
 ### Code Documentation
 
-```go
-// UserService provides user management functionality
-type UserService struct {
-    store  store.UserStore
-    logger *logger.Logger
-}
+- Document all public functions and types
+- Use clear, concise comments
+- Include examples for complex functions
 
+```go
 // CreateUser creates a new user with the provided information.
-// It validates the user data and returns an error if validation fails.
-func (s *UserService) CreateUser(ctx context.Context, user *models.User) error {
+// It validates the input, checks for duplicates, and publishes
+// a UserCreated event upon successful creation.
+func (s *UserService) CreateUser(ctx context.Context, req *CreateUserRequest) (*models.User, error) {
     // Implementation
 }
 ```
 
 ### API Documentation
 
-Use OpenAPI/Swagger annotations:
-
-```go
-// CreateUser creates a new user
-// @Summary Create user
-// @Description Create a new user account
-// @Tags users
-// @Accept json
-// @Produce json
-// @Param user body models.User true "User information"
-// @Success 201 {object} models.User
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /users [post]
-func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
-    // Implementation
-}
-```
+- Update API documentation for new endpoints
+- Include request/response examples
+- Document error responses
 
 ### README Updates
 
-Update relevant README files when adding new features:
-
-- Main README.md
-- Package-specific README files
-- API documentation
-- Configuration examples
+- Update README.md for significant changes
+- Add new features to the features list
+- Update installation instructions if needed
 
 ## Pull Request Process
 
 ### Before Submitting
 
-- [ ] Code follows style guidelines
-- [ ] All tests pass
-- [ ] Code is properly documented
-- [ ] No security vulnerabilities
-- [ ] Performance impact considered
-- [ ] Breaking changes documented
+1. **Run Tests**: Ensure all tests pass
+2. **Check Linting**: Run `golangci-lint` and fix issues
+3. **Update Documentation**: Update relevant documentation
+4. **Rebase**: Rebase on latest main branch
 
 ### Pull Request Template
 
@@ -379,38 +245,22 @@ Brief description of changes
 - [ ] Manual testing completed
 
 ## Checklist
-- [ ] Code follows style guidelines
+- [ ] Code follows project style guidelines
 - [ ] Self-review completed
 - [ ] Documentation updated
-- [ ] No breaking changes (or documented)
-
-## Related Issues
-Closes #123
+- [ ] Tests added/updated
 ```
 
 ### Review Process
 
-1. **Automated Checks**
-   - CI/CD pipeline runs
-   - Code quality checks
-   - Security scans
-   - Test coverage
-
-2. **Manual Review**
-   - Code review by maintainers
-   - Architecture review for major changes
-   - Security review for sensitive changes
-
-3. **Approval**
-   - At least one maintainer approval required
-   - All checks must pass
-   - No unresolved discussions
+1. **Automated Checks**: CI/CD pipeline runs tests and linting
+2. **Code Review**: At least one maintainer reviews the code
+3. **Testing**: Reviewer tests the changes
+4. **Approval**: Maintainer approves and merges
 
 ## Issue Guidelines
 
 ### Bug Reports
-
-Use the bug report template:
 
 ```markdown
 **Describe the bug**
@@ -425,18 +275,16 @@ Steps to reproduce the behavior:
 **Expected behavior**
 What you expected to happen.
 
-**Environment:**
+**Environment**
 - OS: [e.g. Ubuntu 20.04]
 - Go version: [e.g. 1.22.0]
-- Version: [e.g. 1.0.0]
+- Application version: [e.g. v1.0.0]
 
 **Additional context**
 Any other context about the problem.
 ```
 
 ### Feature Requests
-
-Use the feature request template:
 
 ```markdown
 **Is your feature request related to a problem?**
@@ -452,160 +300,44 @@ Alternative solutions or features you've considered.
 Any other context or screenshots about the feature request.
 ```
 
-### Issue Labels
+## Development Tools
 
-- `bug`: Something isn't working
-- `enhancement`: New feature or request
-- `documentation`: Improvements or additions to documentation
-- `good first issue`: Good for newcomers
-- `help wanted`: Extra attention is needed
-- `priority: high`: High priority
-- `priority: medium`: Medium priority
-- `priority: low`: Low priority
+### Recommended IDE
 
-## Development Workflow
+- **VS Code** with Go extension
+- **GoLand** by JetBrains
+- **Vim/Neovim** with vim-go
 
-### Daily Workflow
+### Useful Commands
 
-1. **Start of day**
-   ```bash
-   git checkout main
-   git pull upstream main
-   ```
+```bash
+# Format code
+go fmt ./...
 
-2. **Create feature branch**
-   ```bash
-   git checkout -b feature/your-feature
-   ```
+# Run linter
+golangci-lint run
 
-3. **Make changes and commit**
-   ```bash
-   git add .
-   git commit -m "feat: add your feature"
-   ```
+# Run tests with coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
 
-4. **Push and create PR**
-   ```bash
-   git push origin feature/your-feature
-   ```
+# Build application
+go build -o bin/bazarutod cmd/bazarutod/main.go
 
-### Weekly Workflow
-
-1. **Update dependencies**
-   ```bash
-   go mod tidy
-   go mod verify
-   ```
-
-2. **Run full test suite**
-   ```bash
-   make test-all
-   ```
-
-3. **Update documentation**
-   - Review and update docs
-   - Check for outdated information
-
-## Performance Guidelines
-
-### Database Performance
-
-- Use indexes appropriately
-- Avoid N+1 queries
-- Use connection pooling
-- Implement query timeouts
-
-### Memory Management
-
-- Avoid memory leaks
-- Use proper resource cleanup
-- Monitor memory usage
-- Implement proper caching
-
-### API Performance
-
-- Implement proper pagination
-- Use compression
-- Cache frequently accessed data
-- Optimize response sizes
-
-## Security Guidelines
-
-### Input Validation
-
-```go
-// Validate all inputs
-func validateUser(user *models.User) error {
-    if user.Email == "" {
-        return errors.New("email is required")
-    }
-    
-    if !isValidEmail(user.Email) {
-        return errors.New("invalid email format")
-    }
-    
-    return nil
-}
+# Run application
+go run cmd/bazarutod/main.go serve
 ```
 
-### Authentication
+## Getting Help
 
-- Use secure JWT secrets
-- Implement proper token expiration
-- Use HTTPS in production
-- Implement rate limiting
+- **GitHub Issues**: For bugs and feature requests
+- **GitHub Discussions**: For questions and general discussion
+- **Documentation**: Check the `/docs` directory
 
-### Data Protection
+## Code of Conduct
 
-- Encrypt sensitive data
-- Use parameterized queries
-- Implement proper access controls
-- Log security events
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold this code.
 
-## Troubleshooting
+## License
 
-### Common Issues
-
-1. **Build failures**
-   ```bash
-   # Clean and rebuild
-   make clean
-   go mod download
-   make build
-   ```
-
-2. **Test failures**
-   ```bash
-   # Run tests with verbose output
-   go test -v ./...
-   
-   # Check test coverage
-   go test -cover ./...
-   ```
-
-3. **Database issues**
-   ```bash
-   # Reset database
-   make db-reset
-   make migrate
-   ```
-
-### Getting Help
-
-- Check existing issues and discussions
-- Join our community chat
-- Contact maintainers
-- Read the documentation
-
-## Recognition
-
-Contributors are recognized in:
-
-- CONTRIBUTORS.md file
-- Release notes
-- Project documentation
-- Community acknowledgments
-
-Thank you for contributing to the Bazaruto Insurance Platform! 🚀
-
-
+By contributing, you agree that your contributions will be licensed under the MIT License.
