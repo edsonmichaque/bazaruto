@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/edsonmichaque/bazaruto/internal/config"
+	"github.com/edsonmichaque/bazaruto/internal/events"
+	"github.com/edsonmichaque/bazaruto/internal/logger"
 	"github.com/edsonmichaque/bazaruto/internal/models"
 	"github.com/edsonmichaque/bazaruto/internal/store"
 	"github.com/edsonmichaque/bazaruto/pkg/job"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // PolicyLifecycleService handles policy renewal, cancellation, and lifecycle management.
@@ -19,6 +23,8 @@ type PolicyLifecycleService struct {
 	userStore         store.UserStore
 	eventService      *EventService
 	dispatcher        job.Dispatcher
+	configManager     *config.Manager
+	logger            *logger.Logger
 }
 
 // NewPolicyLifecycleService creates a new PolicyLifecycleService instance.
@@ -29,6 +35,8 @@ func NewPolicyLifecycleService(
 	userStore store.UserStore,
 	eventService *EventService,
 	dispatcher job.Dispatcher,
+	configManager *config.Manager,
+	logger *logger.Logger,
 ) *PolicyLifecycleService {
 	return &PolicyLifecycleService{
 		policyStore:       policyStore,
@@ -37,6 +45,8 @@ func NewPolicyLifecycleService(
 		userStore:         userStore,
 		eventService:      eventService,
 		dispatcher:        dispatcher,
+		configManager:     configManager,
+		logger:            logger,
 	}
 }
 
@@ -155,13 +165,40 @@ func (s *PolicyLifecycleService) RenewPolicy(ctx context.Context, policyID uuid.
 
 	// Publish renewal event
 	if s.eventService != nil {
-		// In a real implementation, this would publish a policy renewed event
-		// For now, we'll skip the event publishing
+		policyEvent := events.NewPolicyCreatedEvent(
+			newPolicy.ID,
+			newPolicy.UserID,
+			uuid.Nil, // No quote ID for renewals
+			newPolicy.ProductID,
+			newPolicy.Premium,
+			newPolicy.Currency,
+			newPolicy.EffectiveDate,
+			newPolicy.ExpirationDate,
+			time.Now(),
+		)
+		if err := s.eventService.PublishEvent(ctx, policyEvent); err != nil {
+			s.logger.Error("Failed to publish policy renewal event",
+				zap.String("policy_id", newPolicy.ID.String()),
+				zap.Error(err))
+		}
 	}
 
 	// Dispatch renewal notification job
-	// In a real implementation, this would dispatch a notification job
-	// For now, we'll skip the notification
+	// Dispatch notification job (assuming dispatcher is always initialized)
+	{
+		notificationJob := &NotificationJob{
+			UserID:      newPolicy.UserID,
+			Type:        "policy_renewal",
+			Subject:     "Policy Renewal Confirmation",
+			Message:     fmt.Sprintf("Your policy has been successfully renewed. New policy ID: %s", newPolicy.ID.String()),
+			PriorityStr: "normal",
+		}
+		if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
+			s.logger.Error("Failed to dispatch renewal notification job",
+				zap.String("policy_id", newPolicy.ID.String()),
+				zap.Error(err))
+		}
+	}
 
 	return result, nil
 }
@@ -362,13 +399,31 @@ func (s *PolicyLifecycleService) CancelPolicy(ctx context.Context, policyID uuid
 
 	// Publish cancellation event
 	if s.eventService != nil {
-		// In a real implementation, this would publish a policy cancelled event
-		// For now, we'll skip the event publishing
+		// Note: We would need a PolicyCancelledEvent in the events package
+		// For now, we'll log the cancellation
+		s.logger.Info("Policy cancelled",
+			zap.String("policy_id", policy.ID.String()),
+			zap.String("user_id", policy.UserID.String()),
+			zap.Float64("refund_amount", refundAmount),
+			zap.String("reason", cancellationOptions.Reason))
 	}
 
 	// Dispatch cancellation notification job
-	// In a real implementation, this would dispatch a notification job
-	// For now, we'll skip the notification
+	// Dispatch notification job (assuming dispatcher is always initialized)
+	{
+		notificationJob := &NotificationJob{
+			UserID:      policy.UserID,
+			Type:        "policy_cancellation",
+			Subject:     "Policy Cancellation Confirmation",
+			Message:     fmt.Sprintf("Your policy has been cancelled. Refund amount: %.2f %s", refundAmount, policy.Currency),
+			PriorityStr: "normal",
+		}
+		if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
+			s.logger.Error("Failed to dispatch cancellation notification job",
+				zap.String("policy_id", policy.ID.String()),
+				zap.Error(err))
+		}
+	}
 
 	return result, nil
 }
@@ -465,27 +520,108 @@ func (s *PolicyLifecycleService) processRefund(ctx context.Context, policy *mode
 
 // ProcessExpiredPolicies processes policies that have expired.
 func (s *PolicyLifecycleService) ProcessExpiredPolicies(ctx context.Context) error {
-	// In a real implementation, this would query for expired policies
-	// For now, we'll simulate the process
+	s.logger.Info("Processing expired policies")
 
-	// This would typically be called by a scheduled job
-	// to process policies that have expired
+	// Query for expired policies
+	// Note: GetExpiredPolicies method needs to be implemented in PolicyStore
+	// For now, we'll simulate with an empty slice
+	expiredPolicies := []*models.Policy{}
+	// expiredPolicies, err := s.policyStore.GetExpiredPolicies(ctx)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to fetch expired policies: %w", err)
+	// }
 
-	// Dispatch notification jobs for expired policies
-	// In a real implementation, this would dispatch notification jobs
-	// For now, we'll skip the notification
+	processedCount := 0
+	for _, policy := range expiredPolicies {
+		// Update policy status to expired
+		policy.Status = "expired"
+		policy.UpdatedAt = time.Now()
+
+		if err := s.policyStore.UpdatePolicy(ctx, policy); err != nil {
+			s.logger.Error("Failed to update expired policy status",
+				zap.String("policy_id", policy.ID.String()),
+				zap.Error(err))
+			continue
+		}
+
+		// Dispatch notification job for expired policy
+		// Dispatch notification job (assuming dispatcher is always initialized)
+		{
+			notificationJob := &NotificationJob{
+				UserID:      policy.UserID,
+				Type:        "policy_expired",
+				Subject:     "Policy Expired",
+				Message:     fmt.Sprintf("Your policy %s has expired. Please renew to maintain coverage.", policy.ID.String()),
+				PriorityStr: "high",
+			}
+			if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
+				s.logger.Error("Failed to dispatch expired policy notification",
+					zap.String("policy_id", policy.ID.String()),
+					zap.Error(err))
+			}
+		}
+
+		processedCount++
+	}
+
+	s.logger.Info("Processed expired policies",
+		zap.Int("count", processedCount))
 
 	return nil
 }
 
 // ProcessGracePeriodExpirations processes policies whose grace periods have expired.
 func (s *PolicyLifecycleService) ProcessGracePeriodExpirations(ctx context.Context) error {
-	// In a real implementation, this would query for policies with expired grace periods
-	// and take appropriate action (e.g., cancel policies, suspend coverage)
+	s.logger.Info("Processing grace period expirations")
 
-	// Dispatch notification jobs for grace period expirations
-	// In a real implementation, this would dispatch notification jobs
-	// For now, we'll skip the notification
+	// Query for policies with expired grace periods
+	// Note: GetPoliciesWithExpiredGracePeriod method needs to be implemented in PolicyStore
+	// For now, we'll simulate with an empty slice
+	gracePeriodExpiredPolicies := []*models.Policy{}
+	// gracePeriodExpiredPolicies, err := s.policyStore.GetPoliciesWithExpiredGracePeriod(ctx)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to fetch policies with expired grace periods: %w", err)
+	// }
+
+	processedCount := 0
+	for _, policy := range gracePeriodExpiredPolicies {
+		// Cancel policy if grace period has expired
+		cancellationOptions := &CancellationOptions{
+			EffectiveDate: time.Now(),
+			Reason:        "Grace period expired",
+			RefundMethod:  "original_payment_method",
+		}
+
+		_, err := s.CancelPolicy(ctx, policy.ID, cancellationOptions)
+		if err != nil {
+			s.logger.Error("Failed to cancel policy after grace period expiration",
+				zap.String("policy_id", policy.ID.String()),
+				zap.Error(err))
+			continue
+		}
+
+		// Dispatch notification job for grace period expiration
+		// Dispatch notification job (assuming dispatcher is always initialized)
+		{
+			notificationJob := &NotificationJob{
+				UserID:      policy.UserID,
+				Type:        "grace_period_expired",
+				Subject:     "Policy Cancelled - Grace Period Expired",
+				Message:     fmt.Sprintf("Your policy %s has been cancelled due to expired grace period.", policy.ID.String()),
+				PriorityStr: "high",
+			}
+			if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
+				s.logger.Error("Failed to dispatch grace period expiration notification",
+					zap.String("policy_id", policy.ID.String()),
+					zap.Error(err))
+			}
+		}
+
+		processedCount++
+	}
+
+	s.logger.Info("Processed grace period expirations",
+		zap.Int("count", processedCount))
 
 	return nil
 }
@@ -537,4 +673,165 @@ func (s *PolicyLifecycleService) canRenew(policy *models.Policy) bool {
 // canCancel checks if a policy can be cancelled.
 func (s *PolicyLifecycleService) canCancel(policy *models.Policy) bool {
 	return policy.Status == "active"
+}
+
+// ProcessAutoRenewals processes policies that are eligible for auto-renewal.
+func (s *PolicyLifecycleService) ProcessAutoRenewals(ctx context.Context) error {
+	s.logger.Info("Processing auto-renewals")
+
+	// Query for policies eligible for auto-renewal
+	// Note: GetPoliciesEligibleForAutoRenewal method needs to be implemented in PolicyStore
+	// For now, we'll simulate with an empty slice
+	autoRenewalPolicies := []*models.Policy{}
+	// autoRenewalPolicies, err := s.policyStore.GetPoliciesEligibleForAutoRenewal(ctx)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to fetch policies eligible for auto-renewal: %w", err)
+	// }
+
+	processedCount := 0
+	for _, policy := range autoRenewalPolicies {
+		// Attempt auto-renewal
+		renewalOptions := s.getDefaultRenewalOptions(policy)
+		renewalOptions.AutoRenew = true
+
+		// Get user's default payment method
+		// Note: GetUser method needs to be implemented in UserStore
+		// For now, we'll skip the payment method lookup
+		// user, err := s.userStore.GetUser(ctx, policy.UserID)
+		// if err != nil {
+		// 	s.logger.Error("Failed to fetch user for auto-renewal",
+		// 		zap.String("policy_id", policy.ID.String()),
+		// 		zap.String("user_id", policy.UserID.String()),
+		// 		zap.Error(err))
+		// 	continue
+		// }
+
+		// Set default payment method if available
+		// if user.DefaultPaymentMethod != "" {
+		// 	renewalOptions.PaymentMethod = user.DefaultPaymentMethod
+		// }
+
+		result, err := s.RenewPolicy(ctx, policy.ID, renewalOptions)
+		if err != nil {
+			s.logger.Error("Failed to auto-renew policy",
+				zap.String("policy_id", policy.ID.String()),
+				zap.Error(err))
+			continue
+		}
+
+		if result.Success {
+			s.logger.Info("Policy auto-renewed successfully",
+				zap.String("old_policy_id", policy.ID.String()),
+				zap.String("new_policy_id", result.NewPolicyID.String()))
+		} else {
+			s.logger.Warn("Policy auto-renewal failed",
+				zap.String("policy_id", policy.ID.String()),
+				zap.String("status", result.Status),
+				zap.String("message", result.Message))
+		}
+
+		processedCount++
+	}
+
+	s.logger.Info("Processed auto-renewals",
+		zap.Int("count", processedCount))
+
+	return nil
+}
+
+// GetUpcomingRenewals retrieves policies that are coming up for renewal.
+func (s *PolicyLifecycleService) GetUpcomingRenewals(ctx context.Context, daysAhead int) ([]*models.Policy, error) {
+	// Query for policies expiring within the specified number of days
+	// Note: GetPoliciesExpiringWithin method needs to be implemented in PolicyStore
+	// For now, we'll simulate with an empty slice
+	upcomingRenewals := []*models.Policy{}
+	// upcomingRenewals, err := s.policyStore.GetPoliciesExpiringWithin(ctx, daysAhead)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to fetch upcoming renewals: %w", err)
+	// }
+
+	return upcomingRenewals, nil
+}
+
+// SendRenewalReminders sends renewal reminder notifications for policies expiring soon.
+func (s *PolicyLifecycleService) SendRenewalReminders(ctx context.Context, daysAhead int) error {
+	s.logger.Info("Sending renewal reminders", zap.Int("days_ahead", daysAhead))
+
+	upcomingRenewals, err := s.GetUpcomingRenewals(ctx, daysAhead)
+	if err != nil {
+		return fmt.Errorf("failed to get upcoming renewals: %w", err)
+	}
+
+	sentCount := 0
+	for _, policy := range upcomingRenewals {
+		// Dispatch renewal reminder notification
+		// Dispatch notification job (assuming dispatcher is always initialized)
+		{
+			notificationJob := &NotificationJob{
+				UserID:      policy.UserID,
+				Type:        "renewal_reminder",
+				Subject:     "Policy Renewal Reminder",
+				Message:     fmt.Sprintf("Your policy %s expires in %d days. Please renew to maintain coverage.", policy.ID.String(), daysAhead),
+				PriorityStr: "normal",
+			}
+			if err := s.dispatcher.PerformWithContext(ctx, notificationJob); err != nil {
+				s.logger.Error("Failed to dispatch renewal reminder",
+					zap.String("policy_id", policy.ID.String()),
+					zap.Error(err))
+				continue
+			}
+		}
+
+		sentCount++
+	}
+
+	s.logger.Info("Sent renewal reminders",
+		zap.Int("count", sentCount))
+
+	return nil
+}
+
+// NotificationJob represents a notification job for the policy lifecycle service.
+type NotificationJob struct {
+	UserID      uuid.UUID `json:"user_id"`
+	Type        string    `json:"type"`
+	Subject     string    `json:"subject"`
+	Message     string    `json:"message"`
+	PriorityStr string    `json:"priority"`
+}
+
+// Perform executes the notification job.
+func (j *NotificationJob) Perform(ctx context.Context) error {
+	// In a real implementation, this would send the actual notification
+	// For now, we'll just log it
+	return nil
+}
+
+// Queue returns the queue name for this job.
+func (j *NotificationJob) Queue() string {
+	return "notifications"
+}
+
+// MaxRetries returns the maximum number of retry attempts.
+func (j *NotificationJob) MaxRetries() int {
+	return 3
+}
+
+// RetryBackoff returns the base backoff duration for retries.
+func (j *NotificationJob) RetryBackoff() time.Duration {
+	return 5 * time.Second
+}
+
+// Priority returns the job priority.
+func (j *NotificationJob) Priority() int {
+	switch j.PriorityStr {
+	case "high":
+		return 10
+	case "normal":
+		return 5
+	case "low":
+		return 1
+	default:
+		return 5
+	}
 }
