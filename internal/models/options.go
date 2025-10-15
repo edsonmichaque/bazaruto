@@ -317,3 +317,20 @@ func NewCustomerListOptions() *CustomerListOptions {
 		ListOptions: DefaultListOptions(),
 	}
 }
+
+// ProductListOptions provides filtering options specific to products
+type ProductListOptions struct {
+	*ListOptions
+	PartnerID *uuid.UUID `json:"partner_id" form:"partner_id"`
+	Category  string     `json:"category" form:"category"`
+	Currency  string     `json:"currency" form:"currency"`
+	MinPrice  *float64   `json:"min_price" form:"min_price"`
+	MaxPrice  *float64   `json:"max_price" form:"max_price"`
+}
+
+// NewProductListOptions creates product-specific list options
+func NewProductListOptions() *ProductListOptions {
+	return &ProductListOptions{
+		ListOptions: DefaultListOptions(),
+	}
+}

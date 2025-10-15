@@ -7,6 +7,7 @@ import (
 // Stores aggregates all store interfaces for dependency injection.
 type Stores struct {
 	Users         UserStore
+	Customers     CustomerStore
 	Partners      PartnerStore
 	Products      ProductStore
 	Quotes        QuoteStore
@@ -24,6 +25,7 @@ type Stores struct {
 func NewStores(db *gorm.DB) *Stores {
 	return &Stores{
 		Users:         NewUserStore(db),
+		Customers:     NewCustomerStore(db),
 		Partners:      NewPartnerStore(db),
 		Products:      NewProductStore(db),
 		Quotes:        NewQuoteStore(db),

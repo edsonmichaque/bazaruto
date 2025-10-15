@@ -93,19 +93,26 @@ func (s *ProductService) GetProduct(ctx context.Context, id uuid.UUID) (*models.
 }
 
 // ListProducts retrieves a list of products with filtering.
-func (s *ProductService) ListProducts(ctx context.Context, partnerID *uuid.UUID, category string, limit, offset int) ([]*models.Product, error) {
-	// Validate pagination parameters
-	if limit < 0 {
-		limit = 0
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
+func (s *ProductService) ListProducts(ctx context.Context, opts *models.ProductListOptions) ([]*models.Product, error) {
+	if opts == nil {
+		opts = models.NewProductListOptions()
 	}
 
-	products, err := s.store.ListProducts(ctx, partnerID, category, limit, offset)
+	// Validate and set defaults
+	if opts.Page < 1 {
+		opts.Page = 1
+	}
+	if opts.PerPage < 1 {
+		opts.PerPage = 20
+	}
+	if opts.PerPage > 100 {
+		opts.PerPage = 100
+	}
+
+	// Calculate offset from page and per_page
+	offset := (opts.Page - 1) * opts.PerPage
+
+	products, err := s.store.ListProducts(ctx, opts.PartnerID, opts.Category, opts.PerPage, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list products: %w", err)
 	}
@@ -171,6 +178,9 @@ func (s *ProductService) DeleteProduct(ctx context.Context, id uuid.UUID) error 
 }
 
 // CountProducts returns the total number of products with filtering.
-func (s *ProductService) CountProducts(ctx context.Context, partnerID *uuid.UUID, category string) (int64, error) {
-	return s.store.CountProducts(ctx, partnerID, category)
+func (s *ProductService) CountProducts(ctx context.Context, opts *models.ProductListOptions) (int64, error) {
+	if opts == nil {
+		opts = models.NewProductListOptions()
+	}
+	return s.store.CountProducts(ctx, opts.PartnerID, opts.Category)
 }

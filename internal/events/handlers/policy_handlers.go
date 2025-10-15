@@ -7,6 +7,7 @@ import (
 
 	"github.com/edsonmichaque/bazaruto/internal/events"
 	"github.com/edsonmichaque/bazaruto/internal/jobs"
+	"github.com/edsonmichaque/bazaruto/pkg/event"
 	"github.com/edsonmichaque/bazaruto/pkg/job"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -254,4 +255,39 @@ func (h *PolicyEventHandler) HandleRenewalReminder(ctx context.Context, event *e
 	}
 
 	return nil
+}
+
+// Handle processes events and dispatches appropriate jobs.
+func (h *PolicyEventHandler) Handle(ctx context.Context, event event.Event) error {
+	switch e := event.(type) {
+	case *events.PolicyRenewedEvent:
+		return h.HandlePolicyRenewed(ctx, e)
+	case *events.PolicyCancelledEvent:
+		return h.HandlePolicyCancelled(ctx, e)
+	case *events.PolicyExpiredEvent:
+		return h.HandlePolicyExpired(ctx, e)
+	case *events.GracePeriodExpiredEvent:
+		return h.HandleGracePeriodExpired(ctx, e)
+	case *events.RenewalReminderEvent:
+		return h.HandleRenewalReminder(ctx, e)
+	default:
+		return fmt.Errorf("unsupported event type: %T", event)
+	}
+}
+
+// CanHandle returns true if this handler can process the given event type.
+func (h *PolicyEventHandler) CanHandle(eventType string) bool {
+	supportedTypes := map[string]bool{
+		"policy.renewed":       true,
+		"policy.cancelled":     true,
+		"policy.expired":       true,
+		"grace_period.expired": true,
+		"renewal.reminder":     true,
+	}
+	return supportedTypes[eventType]
+}
+
+// HandlerName returns a unique name for this handler.
+func (h *PolicyEventHandler) HandlerName() string {
+	return "policy_event_handler"
 }

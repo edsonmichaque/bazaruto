@@ -2,24 +2,16 @@ package commands
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	app "github.com/edsonmichaque/bazaruto/internal/application"
 	"github.com/edsonmichaque/bazaruto/internal/config"
-	"github.com/edsonmichaque/bazaruto/internal/database"
-	"github.com/edsonmichaque/bazaruto/internal/logger"
-	"github.com/edsonmichaque/bazaruto/internal/metrics"
 	"github.com/edsonmichaque/bazaruto/internal/router"
-	"github.com/edsonmichaque/bazaruto/internal/services"
-	"github.com/edsonmichaque/bazaruto/internal/store"
-	"github.com/edsonmichaque/bazaruto/internal/tracing"
-	"go.uber.org/zap"
 )
 
 func newServeCmd(ctx context.Context) *cobra.Command {
@@ -35,72 +27,46 @@ The server will listen on the configured address and serve the REST API endpoint
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
 
-			// Initialize observability
-			logger := logger.NewLogger(cfg.LogLevel, cfg.LogFormat)
-			metrics := metrics.NewMetrics()
-			var tracer *tracing.Tracer
-			if cfg.Tracing.Enabled {
-				tracer, err = tracing.NewTracer(cfg.Tracing.ServiceName, cfg.Tracing.Endpoint)
-				if err != nil {
-					logger.Error("Failed to initialize tracer", zap.Error(err))
-					return fmt.Errorf("failed to initialize tracer: %w", err)
-				}
-			}
-
-			// Connect to database
-			db, err := database.Connect(cfg.DB.DSN, database.DBConfig{
-				MaxConnections: cfg.DB.MaxConnections,
-				MinConnections: cfg.DB.MinConnections,
-				ConnectTimeout: cfg.DB.ConnectTimeout,
-				AcquireTimeout: cfg.DB.AcquireTimeout,
-				MaxLifetime:    cfg.DB.MaxLifetime,
-				IdleTimeout:    cfg.DB.IdleTimeout,
-			})
+			// Wire the entire application
+			application, err := app.NewApplication(ctx, cfg)
 			if err != nil {
-				return fmt.Errorf("failed to connect to database: %w", err)
+				return fmt.Errorf("failed to wire application: %w", err)
 			}
-			defer func() { _ = db.Close() }()
+			defer func() { _ = application.Close() }()
 
-			// Create stores and services
-			stores := store.NewStores(db.DB)
-			_ = services.NewProductService(stores.Products)
-			_ = services.NewQuoteService(stores.Quotes)
-			_ = services.NewPolicyService(stores.Policies)
-			_ = services.NewClaimService(stores.Claims, stores.Policies)
-
-			// Create router
+			// Create router with wired application
 			r := chi.NewRouter()
-			cleanup := router.Register(r, cfg, db, logger, metrics, tracer)
+			cleanup := router.RegisterWithApp(r, application)
 			defer cleanup()
 
-			// Create HTTP server
-			srv := &http.Server{
-				Addr:              cfg.Server.Addr,
-				Handler:           r,
-				ReadHeaderTimeout: 10 * time.Second,
-				ReadTimeout:       cfg.Server.ReadTimeout,
-				WriteTimeout:      cfg.Server.WriteTimeout,
-				IdleTimeout:       cfg.Server.IdleTimeout,
-			}
+			// Set the handler for the application server
+			application.SetHandler(r)
 
-			cmd.Printf("Starting server on %s\n", cfg.Server.Addr)
+			cmd.Printf("Starting server on %s\n", application.Config.Server.Addr)
 
 			// Use errgroup for graceful shutdown
 			g, gctx := errgroup.WithContext(ctx)
 
-			// Start HTTP server
+			// Start HTTP server using Application method
 			g.Go(func() error {
-				err := srv.ListenAndServe()
-				if errors.Is(err, http.ErrServerClosed) {
-					return nil
+				if err := application.StartServer(gctx); err != nil {
+					return fmt.Errorf("failed to start server: %w", err)
 				}
-				return err
+				return nil
+			})
+
+			// Start workers using Application method
+			g.Go(func() error {
+				if err := application.StartWorkers(gctx); err != nil {
+					return fmt.Errorf("failed to start workers: %w", err)
+				}
+				return nil
 			})
 
 			// Start metrics server if enabled
-			if cfg.MetricsEnabled {
+			if application.Config.MetricsEnabled {
 				g.Go(func() error {
-					return metrics.StartMetricsServer(gctx, ":9090")
+					return application.Metrics.StartMetricsServer(gctx, ":9090")
 				})
 			}
 
@@ -110,7 +76,16 @@ The server will listen on the configured address and serve the REST API endpoint
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
 				cmd.Println("Shutting down gracefully...")
-				return srv.Shutdown(shutdownCtx)
+
+				// Stop server and workers
+				if err := application.StopServer(shutdownCtx); err != nil {
+					cmd.Printf("Warning: failed to stop server: %v\n", err)
+				}
+				if err := application.StopWorkers(shutdownCtx); err != nil {
+					cmd.Printf("Warning: failed to stop workers: %v\n", err)
+				}
+
+				return nil
 			})
 
 			// Wait for all goroutines

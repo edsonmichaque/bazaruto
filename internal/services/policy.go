@@ -132,19 +132,26 @@ func (s *PolicyService) GetPolicyByNumber(ctx context.Context, policyNumber stri
 }
 
 // ListPolicies retrieves a list of policies with filtering.
-func (s *PolicyService) ListPolicies(ctx context.Context, userID *uuid.UUID, productID *uuid.UUID, status string, limit, offset int) ([]*models.Policy, error) {
-	// Validate pagination parameters
-	if limit < 0 {
-		limit = 0
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
+func (s *PolicyService) ListPolicies(ctx context.Context, opts *models.PolicyListOptions) ([]*models.Policy, error) {
+	if opts == nil {
+		opts = models.NewPolicyListOptions()
 	}
 
-	policies, err := s.store.ListPolicies(ctx, userID, productID, status, limit, offset)
+	// Validate and set defaults
+	if opts.Page < 1 {
+		opts.Page = 1
+	}
+	if opts.PerPage < 1 {
+		opts.PerPage = 20
+	}
+	if opts.PerPage > 100 {
+		opts.PerPage = 100
+	}
+
+	// Calculate offset from page and per_page
+	offset := (opts.Page - 1) * opts.PerPage
+
+	policies, err := s.store.ListPolicies(ctx, opts.UserID, opts.ProductID, opts.Status, opts.PerPage, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list policies: %w", err)
 	}
@@ -216,8 +223,11 @@ func (s *PolicyService) DeletePolicy(ctx context.Context, id uuid.UUID) error {
 }
 
 // CountPolicies returns the total number of policies with filtering.
-func (s *PolicyService) CountPolicies(ctx context.Context, userID *uuid.UUID, productID *uuid.UUID, status string) (int64, error) {
-	return s.store.CountPolicies(ctx, userID, productID, status)
+func (s *PolicyService) CountPolicies(ctx context.Context, opts *models.PolicyListOptions) (int64, error) {
+	if opts == nil {
+		opts = models.NewPolicyListOptions()
+	}
+	return s.store.CountPolicies(ctx, opts.UserID, opts.ProductID, opts.Status)
 }
 
 // generatePolicyNumber generates a unique policy number.

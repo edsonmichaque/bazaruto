@@ -1,6 +1,7 @@
 package router
 
 import (
+	app "github.com/edsonmichaque/bazaruto/internal/application"
 	"github.com/edsonmichaque/bazaruto/internal/config"
 	"github.com/edsonmichaque/bazaruto/internal/database"
 	"github.com/edsonmichaque/bazaruto/internal/handlers"
@@ -162,6 +163,58 @@ func (rt *Router) GetHandler(name string) interface{} {
 		return rt.versionHandler
 	default:
 		return nil
+	}
+}
+
+// RegisterWithApp creates a router using a fully wired application
+func RegisterWithApp(r chi.Router, application *app.Application) func() {
+	router := NewWithApp(r, application)
+	router.RegisterRoutes()
+	return router.Close
+}
+
+// NewWithApp creates a new Router instance using a wired application
+func NewWithApp(r chi.Router, application *app.Application) *Router {
+	// Create handlers using services from the wired application
+	productHandler := handlers.NewProductHandler(application.ProductService)
+	quoteHandler := handlers.NewQuoteHandler(application.QuoteService)
+	policyHandler := handlers.NewPolicyHandler(application.PolicyService)
+	claimHandler := handlers.NewClaimHandler(application.ClaimService)
+	healthHandler := handlers.NewHealthHandler(application.Database)
+	versionHandler := handlers.NewVersionHandler()
+
+	// Create rate limiting engine
+	var rateLimitEngine *middleware.PolicyEngine
+	var rateLimitCloser func()
+	if application.Config.Rate.Enabled {
+		engine, closer, err := middleware.BuildPolicyEngine(application.Config.Rate, application.Config.Redis)
+		if err != nil {
+			application.Logger.Error("Failed to create rate limiting engine", zap.Error(err))
+		} else {
+			rateLimitEngine = engine
+			rateLimitCloser = closer
+		}
+	}
+
+	return &Router{
+		Router:          r,
+		cfg:             application.Config,
+		db:              application.Database,
+		logger:          application.Logger,
+		metrics:         application.Metrics,
+		tracer:          application.Tracer,
+		productService:  application.ProductService,
+		quoteService:    application.QuoteService,
+		policyService:   application.PolicyService,
+		claimService:    application.ClaimService,
+		productHandler:  productHandler,
+		quoteHandler:    quoteHandler,
+		policyHandler:   policyHandler,
+		claimHandler:    claimHandler,
+		healthHandler:   healthHandler,
+		versionHandler:  versionHandler,
+		rateLimitEngine: rateLimitEngine,
+		rateLimitCloser: rateLimitCloser,
 	}
 }
 

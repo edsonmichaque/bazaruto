@@ -135,19 +135,26 @@ func (s *ClaimService) GetClaimByNumber(ctx context.Context, claimNumber string)
 }
 
 // ListClaims retrieves a list of claims with filtering.
-func (s *ClaimService) ListClaims(ctx context.Context, userID *uuid.UUID, policyID *uuid.UUID, status string, limit, offset int) ([]*models.Claim, error) {
-	// Validate pagination parameters
-	if limit < 0 {
-		limit = 0
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
+func (s *ClaimService) ListClaims(ctx context.Context, opts *models.ClaimListOptions) ([]*models.Claim, error) {
+	if opts == nil {
+		opts = models.NewClaimListOptions()
 	}
 
-	claims, err := s.store.ListClaims(ctx, userID, policyID, status, limit, offset)
+	// Validate and set defaults
+	if opts.Page < 1 {
+		opts.Page = 1
+	}
+	if opts.PerPage < 1 {
+		opts.PerPage = 20
+	}
+	if opts.PerPage > 100 {
+		opts.PerPage = 100
+	}
+
+	// Calculate offset from page and per_page
+	offset := (opts.Page - 1) * opts.PerPage
+
+	claims, err := s.store.ListClaims(ctx, opts.UserID, opts.PolicyID, opts.Status, opts.PerPage, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list claims: %w", err)
 	}
@@ -218,8 +225,11 @@ func (s *ClaimService) DeleteClaim(ctx context.Context, id uuid.UUID) error {
 }
 
 // CountClaims returns the total number of claims with filtering.
-func (s *ClaimService) CountClaims(ctx context.Context, userID *uuid.UUID, policyID *uuid.UUID, status string) (int64, error) {
-	return s.store.CountClaims(ctx, userID, policyID, status)
+func (s *ClaimService) CountClaims(ctx context.Context, opts *models.ClaimListOptions) (int64, error) {
+	if opts == nil {
+		opts = models.NewClaimListOptions()
+	}
+	return s.store.CountClaims(ctx, opts.UserID, opts.PolicyID, opts.Status)
 }
 
 // generateClaimNumber generates a unique claim number.

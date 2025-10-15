@@ -30,39 +30,43 @@ func (h *PolicyHandler) ListPolicies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create policy list options
+	opts := models.NewPolicyListOptions()
+	opts.Page = pagination.Page
+	opts.PerPage = pagination.PerPage
+
 	// Parse filter parameters
-	var userID *uuid.UUID
 	if userIDStr := queryParam(r, "user_id"); userIDStr != "" {
 		if id, err := uuid.Parse(userIDStr); err == nil {
-			userID = &id
+			opts.UserID = &id
 		}
 	}
 
-	var productID *uuid.UUID
 	if productIDStr := queryParam(r, "product_id"); productIDStr != "" {
 		if id, err := uuid.Parse(productIDStr); err == nil {
-			productID = &id
+			opts.ProductID = &id
 		}
 	}
 
-	status := queryParam(r, "status")
+	opts.Status = queryParam(r, "status")
+	opts.Currency = queryParam(r, "currency")
 
 	// Get policies
-	policies, err := h.service.ListPolicies(r.Context(), userID, productID, status, pagination.Limit, pagination.Offset)
+	policies, err := h.service.ListPolicies(r.Context(), opts)
 	if err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}
 
 	// Get total count
-	total, err := h.service.CountPolicies(r.Context(), userID, productID, status)
+	total, err := h.service.CountPolicies(r.Context(), opts)
 	if err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}
 
 	// Write page-based paginated response
-	if err := writePagePaginatedResponse(w, r, policies, total, pagination.Page, pagination.PerPage); err != nil {
+	if err := writePagePaginatedResponse(w, r, policies, total, opts.Page, opts.PerPage); err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}

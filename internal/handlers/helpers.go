@@ -88,8 +88,6 @@ func parseJSON(r *http.Request, v interface{}) error {
 type PaginationParams struct {
 	Page    int
 	PerPage int
-	Limit   int
-	Offset  int
 }
 
 // parsePagination parses pagination parameters from query string.
@@ -116,14 +114,9 @@ func parsePagination(r *http.Request) (*PaginationParams, error) {
 		perPage = 100
 	}
 
-	// Calculate offset from page and per_page for database queries
-	offset := (page - 1) * perPage
-
 	return &PaginationParams{
 		Page:    page,
 		PerPage: perPage,
-		Limit:   perPage,
-		Offset:  offset,
 	}, nil
 }
 

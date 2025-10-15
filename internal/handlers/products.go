@@ -30,32 +30,37 @@ func (h *ProductHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create product list options
+	opts := models.NewProductListOptions()
+	opts.Page = pagination.Page
+	opts.PerPage = pagination.PerPage
+
 	// Parse filter parameters
-	var partnerID *uuid.UUID
 	if partnerIDStr := queryParam(r, "partner_id"); partnerIDStr != "" {
 		if id, err := uuid.Parse(partnerIDStr); err == nil {
-			partnerID = &id
+			opts.PartnerID = &id
 		}
 	}
 
-	category := queryParam(r, "category")
+	opts.Category = queryParam(r, "category")
+	opts.Currency = queryParam(r, "currency")
 
 	// Get products
-	products, err := h.service.ListProducts(r.Context(), partnerID, category, pagination.Limit, pagination.Offset)
+	products, err := h.service.ListProducts(r.Context(), opts)
 	if err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}
 
 	// Get total count
-	total, err := h.service.CountProducts(r.Context(), partnerID, category)
+	total, err := h.service.CountProducts(r.Context(), opts)
 	if err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}
 
 	// Write page-based paginated response
-	if err := writePagePaginatedResponse(w, r, products, total, pagination.Page, pagination.PerPage); err != nil {
+	if err := writePagePaginatedResponse(w, r, products, total, opts.Page, opts.PerPage); err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}

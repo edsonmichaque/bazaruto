@@ -129,6 +129,11 @@ func (m *Manager) Dispatcher() *Dispatcher {
 	return m.dispatcher
 }
 
+// Registry returns the job registry for registering job types
+func (m *Manager) Registry() *Registry {
+	return m.registry
+}
+
 // Stats returns statistics for all queues
 func (m *Manager) Stats(ctx context.Context) (map[string]*QueueStats, error) {
 	return m.adapter.Stats(ctx)

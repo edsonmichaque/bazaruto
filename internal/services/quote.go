@@ -145,19 +145,26 @@ func (s *QuoteService) GetQuoteByNumber(ctx context.Context, quoteNumber string)
 }
 
 // ListQuotes retrieves a list of quotes with filtering.
-func (s *QuoteService) ListQuotes(ctx context.Context, userID *uuid.UUID, productID *uuid.UUID, status string, limit, offset int) ([]*models.Quote, error) {
-	// Validate pagination parameters
-	if limit < 0 {
-		limit = 0
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
+func (s *QuoteService) ListQuotes(ctx context.Context, opts *models.QuoteListOptions) ([]*models.Quote, error) {
+	if opts == nil {
+		opts = models.NewQuoteListOptions()
 	}
 
-	quotes, err := s.store.ListQuotes(ctx, userID, productID, status, limit, offset)
+	// Validate and set defaults
+	if opts.Page < 1 {
+		opts.Page = 1
+	}
+	if opts.PerPage < 1 {
+		opts.PerPage = 20
+	}
+	if opts.PerPage > 100 {
+		opts.PerPage = 100
+	}
+
+	// Calculate offset from page and per_page
+	offset := (opts.Page - 1) * opts.PerPage
+
+	quotes, err := s.store.ListQuotes(ctx, opts.UserID, opts.ProductID, opts.Status, opts.PerPage, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list quotes: %w", err)
 	}
@@ -233,8 +240,11 @@ func (s *QuoteService) ExpireQuote(ctx context.Context, id uuid.UUID) error {
 }
 
 // CountQuotes returns the total number of quotes with filtering.
-func (s *QuoteService) CountQuotes(ctx context.Context, userID *uuid.UUID, productID *uuid.UUID, status string) (int64, error) {
-	return s.store.CountQuotes(ctx, userID, productID, status)
+func (s *QuoteService) CountQuotes(ctx context.Context, opts *models.QuoteListOptions) (int64, error) {
+	if opts == nil {
+		opts = models.NewQuoteListOptions()
+	}
+	return s.store.CountQuotes(ctx, opts.UserID, opts.ProductID, opts.Status)
 }
 
 // CalculatePremium calculates the premium for a quote using risk assessment algorithms.

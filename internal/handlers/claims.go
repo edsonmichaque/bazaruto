@@ -30,39 +30,44 @@ func (h *ClaimHandler) ListClaims(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create claim list options
+	opts := models.NewClaimListOptions()
+	opts.Page = pagination.Page
+	opts.PerPage = pagination.PerPage
+
 	// Parse filter parameters
-	var userID *uuid.UUID
 	if userIDStr := queryParam(r, "user_id"); userIDStr != "" {
 		if id, err := uuid.Parse(userIDStr); err == nil {
-			userID = &id
+			opts.UserID = &id
 		}
 	}
 
-	var policyID *uuid.UUID
 	if policyIDStr := queryParam(r, "policy_id"); policyIDStr != "" {
 		if id, err := uuid.Parse(policyIDStr); err == nil {
-			policyID = &id
+			opts.PolicyID = &id
 		}
 	}
 
-	status := queryParam(r, "status")
+	opts.Status = queryParam(r, "status")
+	opts.ClaimType = queryParam(r, "claim_type")
+	opts.Currency = queryParam(r, "currency")
 
 	// Get claims
-	claims, err := h.service.ListClaims(r.Context(), userID, policyID, status, pagination.Limit, pagination.Offset)
+	claims, err := h.service.ListClaims(r.Context(), opts)
 	if err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}
 
 	// Get total count
-	total, err := h.service.CountClaims(r.Context(), userID, policyID, status)
+	total, err := h.service.CountClaims(r.Context(), opts)
 	if err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}
 
 	// Write page-based paginated response
-	if err := writePagePaginatedResponse(w, r, claims, total, pagination.Page, pagination.PerPage); err != nil {
+	if err := writePagePaginatedResponse(w, r, claims, total, opts.Page, opts.PerPage); err != nil {
 		_ = writeInternalError(w, err)
 		return
 	}
