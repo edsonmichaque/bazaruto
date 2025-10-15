@@ -101,13 +101,13 @@ func (s *FraudDetectionService) AnalyzeClaimForFraud(ctx context.Context, claimI
 	// Analyze various fraud indicators using configuration
 	factors := []FraudFactor{
 		s.analyzeClaimTiming(&fraudConfig, claim, policy),
-		s.analyzeClaimAmount(claim, policy, &fraudConfig),
-		s.analyzeCustomerHistory(claim, customer, &fraudConfig),
-		s.analyzeIncidentPatterns(claim, policy, &fraudConfig),
-		s.analyzeDocumentation(claim, &fraudConfig),
-		s.analyzeGeographicRisk(claim, customer, &fraudConfig),
-		s.analyzeBehavioralPatterns(claim, customer, &fraudConfig),
-		s.analyzePolicyHistory(claim, policy, &fraudConfig),
+		s.analyzeClaimAmount(&fraudConfig, claim, policy),
+		s.analyzeCustomerHistory(&fraudConfig, claim, customer),
+		s.analyzeIncidentPatterns(&fraudConfig, claim, policy),
+		s.analyzeDocumentation(&fraudConfig, claim),
+		s.analyzeGeographicRisk(&fraudConfig, claim, customer),
+		s.analyzeBehavioralPatterns(&fraudConfig, claim, customer),
+		s.analyzePolicyHistory(&fraudConfig, claim, policy),
 	}
 
 	// Calculate weighted fraud score using configuration weights
@@ -126,10 +126,10 @@ func (s *FraudDetectionService) AnalyzeClaimForFraud(ctx context.Context, claimI
 	}
 
 	score.Factors = factors
-	score.Confidence = s.calculateConfidence(factors, &fraudConfig)
-	score.RiskLevel = s.determineRiskLevel(score.Score, &fraudConfig)
-	score.RequiresReview = s.requiresManualReview(score.Score, factors, &fraudConfig)
-	score.Recommendations = s.generateRecommendations(score, factors, &fraudConfig)
+	score.Confidence = s.calculateConfidence(&fraudConfig, factors)
+	score.RiskLevel = s.determineRiskLevel(&fraudConfig, score.Score)
+	score.RequiresReview = s.requiresManualReview(&fraudConfig, score.Score, factors)
+	score.Recommendations = s.generateRecommendations(&fraudConfig, score, factors)
 
 	// Store fraud analysis results
 	score.Metadata["claim_id"] = claimID.String()
@@ -221,7 +221,7 @@ func (s *FraudDetectionService) analyzeClaimTiming(config *config.FraudDetection
 }
 
 // analyzeClaimAmount analyzes claim amount-related fraud indicators using configuration.
-func (s *FraudDetectionService) analyzeClaimAmount(claim *models.Claim, policy *models.Policy, config *config.FraudDetectionConfig) FraudFactor {
+func (s *FraudDetectionService) analyzeClaimAmount(config *config.FraudDetectionConfig, claim *models.Claim, policy *models.Policy) FraudFactor {
 	factor := FraudFactor{
 		Factor: "claim_amount",
 		Weight: config.FactorWeights["claim_amount"],
@@ -275,7 +275,7 @@ func (s *FraudDetectionService) analyzeClaimAmount(claim *models.Claim, policy *
 }
 
 // analyzeCustomerHistory analyzes customer's historical patterns for fraud indicators.
-func (s *FraudDetectionService) analyzeCustomerHistory(claim *models.Claim, customer *models.Customer, config *config.FraudDetectionConfig) FraudFactor {
+func (s *FraudDetectionService) analyzeCustomerHistory(config *config.FraudDetectionConfig, claim *models.Claim, customer *models.Customer) FraudFactor {
 	factor := FraudFactor{
 		Factor: "customer_history",
 		Weight: config.FactorWeights["user_history"],
@@ -337,7 +337,7 @@ func (s *FraudDetectionService) analyzeCustomerHistory(claim *models.Claim, cust
 }
 
 // analyzeIncidentPatterns analyzes patterns in the incident for fraud indicators.
-func (s *FraudDetectionService) analyzeIncidentPatterns(claim *models.Claim, policy *models.Policy, config *config.FraudDetectionConfig) FraudFactor {
+func (s *FraudDetectionService) analyzeIncidentPatterns(config *config.FraudDetectionConfig, claim *models.Claim, policy *models.Policy) FraudFactor {
 	factor := FraudFactor{
 		Factor: "incident_patterns",
 		Weight: config.FactorWeights["incident_patterns"],
@@ -372,7 +372,7 @@ func (s *FraudDetectionService) analyzeIncidentPatterns(claim *models.Claim, pol
 }
 
 // analyzeDocumentation analyzes documentation quality for fraud indicators.
-func (s *FraudDetectionService) analyzeDocumentation(claim *models.Claim, config *config.FraudDetectionConfig) FraudFactor {
+func (s *FraudDetectionService) analyzeDocumentation(config *config.FraudDetectionConfig, claim *models.Claim) FraudFactor {
 	factor := FraudFactor{
 		Factor: "documentation",
 		Weight: config.FactorWeights["documentation"],
@@ -412,7 +412,7 @@ func (s *FraudDetectionService) analyzeDocumentation(claim *models.Claim, config
 }
 
 // analyzeGeographicRisk analyzes geographic risk factors.
-func (s *FraudDetectionService) analyzeGeographicRisk(claim *models.Claim, customer *models.Customer, config *config.FraudDetectionConfig) FraudFactor {
+func (s *FraudDetectionService) analyzeGeographicRisk(config *config.FraudDetectionConfig, claim *models.Claim, customer *models.Customer) FraudFactor {
 	factor := FraudFactor{
 		Factor: "geographic_risk",
 		Weight: config.FactorWeights["geographic_risk"],
@@ -453,7 +453,7 @@ func (s *FraudDetectionService) analyzeGeographicRisk(claim *models.Claim, custo
 }
 
 // analyzeBehavioralPatterns analyzes behavioral patterns for fraud indicators.
-func (s *FraudDetectionService) analyzeBehavioralPatterns(claim *models.Claim, customer *models.Customer, config *config.FraudDetectionConfig) FraudFactor {
+func (s *FraudDetectionService) analyzeBehavioralPatterns(config *config.FraudDetectionConfig, claim *models.Claim, customer *models.Customer) FraudFactor {
 	factor := FraudFactor{
 		Factor: "behavioral_patterns",
 		Weight: config.FactorWeights["behavioral_patterns"],
@@ -492,7 +492,7 @@ func (s *FraudDetectionService) analyzeBehavioralPatterns(claim *models.Claim, c
 }
 
 // analyzePolicyHistory analyzes policy history for fraud indicators.
-func (s *FraudDetectionService) analyzePolicyHistory(claim *models.Claim, policy *models.Policy, config *config.FraudDetectionConfig) FraudFactor {
+func (s *FraudDetectionService) analyzePolicyHistory(config *config.FraudDetectionConfig, claim *models.Claim, policy *models.Policy) FraudFactor {
 	factor := FraudFactor{
 		Factor: "policy_history",
 		Weight: config.FactorWeights["policy_history"],
@@ -528,7 +528,7 @@ func (s *FraudDetectionService) analyzePolicyHistory(claim *models.Claim, policy
 }
 
 // calculateConfidence calculates the confidence level in the fraud score.
-func (s *FraudDetectionService) calculateConfidence(factors []FraudFactor, config *config.FraudDetectionConfig) float64 {
+func (s *FraudDetectionService) calculateConfidence(config *config.FraudDetectionConfig, factors []FraudFactor) float64 {
 	// Confidence is based on the number of factors and their weights
 	totalWeight := 0.0
 	activeFactors := 0
@@ -555,7 +555,7 @@ func (s *FraudDetectionService) calculateConfidence(factors []FraudFactor, confi
 }
 
 // determineRiskLevel determines the risk level based on the fraud score using configuration.
-func (s *FraudDetectionService) determineRiskLevel(score float64, config *config.FraudDetectionConfig) string {
+func (s *FraudDetectionService) determineRiskLevel(config *config.FraudDetectionConfig, score float64) string {
 	thresholds := config.RiskThresholds
 
 	switch {
@@ -571,7 +571,7 @@ func (s *FraudDetectionService) determineRiskLevel(score float64, config *config
 }
 
 // requiresManualReview determines if manual review is required using configuration.
-func (s *FraudDetectionService) requiresManualReview(score float64, factors []FraudFactor, config *config.FraudDetectionConfig) bool {
+func (s *FraudDetectionService) requiresManualReview(config *config.FraudDetectionConfig, score float64, factors []FraudFactor) bool {
 	// Always require review for high scores
 	if score >= config.AutoReviewThresholds.ScoreThreshold {
 		return true
@@ -601,7 +601,7 @@ func (s *FraudDetectionService) requiresManualReview(score float64, factors []Fr
 }
 
 // generateRecommendations generates recommendations based on the fraud analysis using configuration.
-func (s *FraudDetectionService) generateRecommendations(score *FraudScore, factors []FraudFactor, config *config.FraudDetectionConfig) []string {
+func (s *FraudDetectionService) generateRecommendations(config *config.FraudDetectionConfig, score *FraudScore, factors []FraudFactor) []string {
 	recommendations := []string{}
 
 	switch score.RiskLevel {
