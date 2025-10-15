@@ -4,6 +4,13 @@ import (
 	"time"
 )
 
+// ConfigMetadata holds configuration metadata.
+type ConfigMetadata struct {
+	ConfigPath  string    `json:"config_path"`
+	LastUpdated time.Time `json:"last_updated"`
+	Version     string    `json:"version"`
+}
+
 // BusinessRulesConfig holds all business rule configurations.
 type BusinessRulesConfig struct {
 	FraudDetection  FraudDetectionConfig  `json:"fraud_detection"`

@@ -35,6 +35,7 @@ type Router struct {
 	quoteHandler   *handlers.QuoteHandler
 	policyHandler  *handlers.PolicyHandler
 	claimHandler   *handlers.ClaimHandler
+	rulesHandler   *handlers.RulesHandler
 	healthHandler  *handlers.HealthHandler
 	versionHandler *handlers.VersionHandler
 
@@ -120,6 +121,7 @@ func (rt *Router) RegisterRoutes() {
 		rt.quoteHandler.RegisterRoutes(r)
 		rt.policyHandler.RegisterRoutes(r)
 		rt.claimHandler.RegisterRoutes(r)
+		rt.rulesHandler.RegisterRoutes(r)
 	})
 }
 
@@ -180,6 +182,7 @@ func NewWithApp(r chi.Router, application *app.Application) *Router {
 	quoteHandler := handlers.NewQuoteHandler(application.QuoteService)
 	policyHandler := handlers.NewPolicyHandler(application.PolicyService)
 	claimHandler := handlers.NewClaimHandler(application.ClaimService)
+	rulesHandler := handlers.NewRulesHandler(application.ConfigManager, application.Logger)
 	healthHandler := handlers.NewHealthHandler(application.Database)
 	versionHandler := handlers.NewVersionHandler()
 
@@ -211,6 +214,7 @@ func NewWithApp(r chi.Router, application *app.Application) *Router {
 		quoteHandler:    quoteHandler,
 		policyHandler:   policyHandler,
 		claimHandler:    claimHandler,
+		rulesHandler:    rulesHandler,
 		healthHandler:   healthHandler,
 		versionHandler:  versionHandler,
 		rateLimitEngine: rateLimitEngine,

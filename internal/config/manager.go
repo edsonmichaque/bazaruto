@@ -157,6 +157,23 @@ func (m *Manager) GetLastUpdated() time.Time {
 	return m.lastUpdated
 }
 
+// GetMetadata returns configuration metadata.
+func (m *Manager) GetMetadata() *ConfigMetadata {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	return &ConfigMetadata{
+		ConfigPath:  m.configPath,
+		LastUpdated: m.lastUpdated,
+		Version:     "1.0",
+	}
+}
+
+// ValidateConfig validates the business rules configuration.
+func (m *Manager) ValidateConfig(config *BusinessRulesConfig) error {
+	return m.validateConfig(config)
+}
+
 // validateConfig validates the business rules configuration.
 func (m *Manager) validateConfig(config *BusinessRulesConfig) error {
 	if config == nil {
