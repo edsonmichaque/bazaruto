@@ -102,7 +102,7 @@ func (h *PaymentCompletedHandler) Handle(ctx context.Context, event event.Event)
 	emailJob := &jobs.SendEmailJob{
 		To:      fmt.Sprintf("user-%s@example.com", paymentEvent.UserID.String()), // In real app, get from user service
 		Subject: "Payment Confirmation",
-		Body:    fmt.Sprintf("Your payment of %s %s has been processed successfully. Transaction ID: %s", paymentEvent.Amount, paymentEvent.Currency, paymentEvent.TransactionID),
+		Body:    fmt.Sprintf("Your payment of %.2f %s has been processed successfully. Transaction ID: %s", paymentEvent.Amount, paymentEvent.Currency, paymentEvent.TransactionID),
 		From:    "payments@bazaruto.com",
 	}
 
@@ -160,7 +160,7 @@ func (h *PaymentFailedHandler) Handle(ctx context.Context, event event.Event) er
 	emailJob := &jobs.SendEmailJob{
 		To:      fmt.Sprintf("user-%s@example.com", paymentEvent.UserID.String()), // In real app, get from user service
 		Subject: "Payment Failed",
-		Body:    fmt.Sprintf("Your payment of %s %s has failed. Reason: %s", paymentEvent.Amount, paymentEvent.Currency, paymentEvent.ErrorMessage),
+		Body:    fmt.Sprintf("Your payment of %.2f %s has failed. Reason: %s", paymentEvent.Amount, paymentEvent.Currency, paymentEvent.ErrorMessage),
 		From:    "payments@bazaruto.com",
 	}
 
