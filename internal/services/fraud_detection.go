@@ -1,0 +1,499 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"time"
+
+	"github.com/edsonmichaque/bazaruto/internal/models"
+	"github.com/edsonmichaque/bazaruto/internal/store"
+	"github.com/google/uuid"
+)
+
+// FraudDetectionService handles fraud detection and risk assessment for claims and applications.
+type FraudDetectionService struct {
+	claimStore  store.ClaimStore
+	policyStore store.PolicyStore
+	userStore   store.UserStore
+}
+
+// NewFraudDetectionService creates a new FraudDetectionService instance.
+func NewFraudDetectionService(claimStore store.ClaimStore, policyStore store.PolicyStore, userStore store.UserStore) *FraudDetectionService {
+	return &FraudDetectionService{
+		claimStore:  claimStore,
+		policyStore: policyStore,
+		userStore:   userStore,
+	}
+}
+
+// FraudScore represents the result of fraud detection analysis.
+type FraudScore struct {
+	Score           float64                `json:"score"`           // 0-100, higher means more likely fraud
+	RiskLevel       string                 `json:"risk_level"`      // low, medium, high, critical
+	Factors         []FraudFactor          `json:"factors"`         // Individual risk factors
+	Recommendations []string               `json:"recommendations"` // Recommended actions
+	RequiresReview  bool                   `json:"requires_review"` // Whether manual review is needed
+	Confidence      float64                `json:"confidence"`      // Confidence in the score (0-1)
+	AnalysisDate    time.Time              `json:"analysis_date"`
+	Metadata        map[string]interface{} `json:"metadata"`
+}
+
+// FraudFactor represents an individual risk factor in fraud detection.
+type FraudFactor struct {
+	Factor      string  `json:"factor"`      // Name of the risk factor
+	Weight      float64 `json:"weight"`      // Weight of this factor (0-1)
+	Score       float64 `json:"score"`       // Individual score for this factor (0-100)
+	Description string  `json:"description"` // Human-readable description
+	Severity    string  `json:"severity"`    // low, medium, high, critical
+}
+
+// AnalyzeClaimForFraud performs comprehensive fraud detection analysis on a claim.
+func (s *FraudDetectionService) AnalyzeClaimForFraud(ctx context.Context, claimID uuid.UUID) (*FraudScore, error) {
+	// Fetch claim details
+	claim, err := s.claimStore.GetClaim(ctx, claimID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch claim: %w", err)
+	}
+
+	// Fetch related policy and user data
+	policy, err := s.policyStore.GetPolicy(ctx, claim.PolicyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch policy: %w", err)
+	}
+
+	user, err := s.userStore.FindByID(ctx, claim.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user: %w", err)
+	}
+
+	// Perform comprehensive fraud analysis
+	score := &FraudScore{
+		AnalysisDate: time.Now(),
+		Metadata:     make(map[string]interface{}),
+	}
+
+	// Analyze various fraud indicators
+	factors := []FraudFactor{
+		s.analyzeClaimTiming(claim, policy),
+		s.analyzeClaimAmount(claim, policy),
+		s.analyzeUserHistory(claim, user),
+		s.analyzeIncidentPatterns(claim, policy),
+		s.analyzeDocumentation(claim),
+		s.analyzeGeographicRisk(claim, user),
+		s.analyzeBehavioralPatterns(claim, user),
+		s.analyzePolicyHistory(claim, policy),
+	}
+
+	// Calculate weighted fraud score
+	totalWeight := 0.0
+	weightedScore := 0.0
+
+	for _, factor := range factors {
+		if factor.Weight > 0 {
+			totalWeight += factor.Weight
+			weightedScore += factor.Score * factor.Weight
+		}
+	}
+
+	if totalWeight > 0 {
+		score.Score = weightedScore / totalWeight
+	}
+
+	score.Factors = factors
+	score.Confidence = s.calculateConfidence(factors)
+	score.RiskLevel = s.determineRiskLevel(score.Score)
+	score.RequiresReview = s.requiresManualReview(score.Score, factors)
+	score.Recommendations = s.generateRecommendations(score, factors)
+
+	// Store fraud analysis results
+	score.Metadata["claim_id"] = claimID.String()
+	score.Metadata["policy_id"] = claim.PolicyID.String()
+	score.Metadata["user_id"] = claim.UserID.String()
+	score.Metadata["analysis_version"] = "1.0"
+
+	return score, nil
+}
+
+// analyzeClaimTiming analyzes timing-related fraud indicators.
+func (s *FraudDetectionService) analyzeClaimTiming(claim *models.Claim, policy *models.Policy) FraudFactor {
+	factor := FraudFactor{
+		Factor: "claim_timing",
+		Weight: 0.15,
+	}
+
+	// Check if claim is filed very close to policy start
+	daysSincePolicyStart := claim.IncidentDate.Sub(policy.EffectiveDate).Hours() / 24
+	if daysSincePolicyStart < 7 {
+		factor.Score = 80
+		factor.Description = "Claim filed within 7 days of policy start"
+		factor.Severity = "high"
+	} else if daysSincePolicyStart < 30 {
+		factor.Score = 40
+		factor.Description = "Claim filed within 30 days of policy start"
+		factor.Severity = "medium"
+	} else {
+		factor.Score = 10
+		factor.Description = "Claim filed after policy has been active for a reasonable period"
+		factor.Severity = "low"
+	}
+
+	// Check reporting delay
+	reportingDelay := claim.ReportedDate.Sub(claim.IncidentDate).Hours() / 24
+	if reportingDelay > 30 {
+		factor.Score += 20
+		factor.Description += "; Significant delay in reporting"
+		if factor.Severity == "low" {
+			factor.Severity = "medium"
+		}
+	}
+
+	return factor
+}
+
+// analyzeClaimAmount analyzes claim amount-related fraud indicators.
+func (s *FraudDetectionService) analyzeClaimAmount(claim *models.Claim, policy *models.Policy) FraudFactor {
+	factor := FraudFactor{
+		Factor: "claim_amount",
+		Weight: 0.20,
+	}
+
+	// Check if claim amount is close to coverage limit
+	coverageRatio := claim.ClaimAmount / policy.CoverageAmount
+	if coverageRatio > 0.95 {
+		factor.Score = 70
+		factor.Description = "Claim amount is very close to coverage limit"
+		factor.Severity = "high"
+	} else if coverageRatio > 0.8 {
+		factor.Score = 40
+		factor.Description = "Claim amount is high relative to coverage"
+		factor.Severity = "medium"
+	} else if coverageRatio < 0.1 {
+		factor.Score = 5
+		factor.Description = "Claim amount is low relative to coverage"
+		factor.Severity = "low"
+	} else {
+		factor.Score = 15
+		factor.Description = "Claim amount is within normal range"
+		factor.Severity = "low"
+	}
+
+	// Check for round numbers (potential red flag)
+	if math.Mod(claim.ClaimAmount, 1000) == 0 && claim.ClaimAmount > 1000 {
+		factor.Score += 15
+		factor.Description += "; Claim amount is a round number"
+		if factor.Severity == "low" {
+			factor.Severity = "medium"
+		}
+	}
+
+	return factor
+}
+
+// analyzeUserHistory analyzes user's historical patterns for fraud indicators.
+func (s *FraudDetectionService) analyzeUserHistory(claim *models.Claim, user *models.User) FraudFactor {
+	factor := FraudFactor{
+		Factor: "user_history",
+		Weight: 0.25,
+	}
+
+	// This would typically query historical claims, payments, etc.
+	// For now, we'll use account age as a proxy
+	accountAge := time.Since(user.CreatedAt).Hours() / 24 / 365 // years
+
+	if accountAge < 0.5 { // Less than 6 months
+		factor.Score = 60
+		factor.Description = "New user account (less than 6 months old)"
+		factor.Severity = "high"
+	} else if accountAge < 1 { // Less than 1 year
+		factor.Score = 30
+		factor.Description = "Relatively new user account"
+		factor.Severity = "medium"
+	} else {
+		factor.Score = 10
+		factor.Description = "Established user account"
+		factor.Severity = "low"
+	}
+
+	// Check user status
+	if user.Status != models.StatusActive {
+		factor.Score += 30
+		factor.Description += "; User account is not active"
+		factor.Severity = "high"
+	}
+
+	return factor
+}
+
+// analyzeIncidentPatterns analyzes patterns in the incident for fraud indicators.
+func (s *FraudDetectionService) analyzeIncidentPatterns(claim *models.Claim, policy *models.Policy) FraudFactor {
+	factor := FraudFactor{
+		Factor: "incident_patterns",
+		Weight: 0.15,
+	}
+
+	// Check if incident occurred on weekend (common fraud pattern)
+	weekday := claim.IncidentDate.Weekday()
+	if weekday == time.Saturday || weekday == time.Sunday {
+		factor.Score = 30
+		factor.Description = "Incident occurred on weekend"
+		factor.Severity = "medium"
+	} else {
+		factor.Score = 10
+		factor.Description = "Incident occurred on weekday"
+		factor.Severity = "low"
+	}
+
+	// Check if incident occurred during business hours
+	hour := claim.IncidentDate.Hour()
+	if hour >= 9 && hour <= 17 {
+		factor.Score += 5
+		factor.Description += "; Incident occurred during business hours"
+	} else {
+		factor.Score += 15
+		factor.Description += "; Incident occurred outside business hours"
+		if factor.Severity == "low" {
+			factor.Severity = "medium"
+		}
+	}
+
+	return factor
+}
+
+// analyzeDocumentation analyzes documentation quality for fraud indicators.
+func (s *FraudDetectionService) analyzeDocumentation(claim *models.Claim) FraudFactor {
+	factor := FraudFactor{
+		Factor: "documentation",
+		Weight: 0.10,
+	}
+
+	// Check number of documents
+	docCount := len(claim.Documents)
+	if docCount == 0 {
+		factor.Score = 80
+		factor.Description = "No supporting documents provided"
+		factor.Severity = "high"
+	} else if docCount < 3 {
+		factor.Score = 40
+		factor.Description = "Limited supporting documentation"
+		factor.Severity = "medium"
+	} else {
+		factor.Score = 10
+		factor.Description = "Adequate supporting documentation"
+		factor.Severity = "low"
+	}
+
+	// Check document quality (simplified)
+	for _, doc := range claim.Documents {
+		if doc.FileSize < 1024 { // Less than 1KB
+			factor.Score += 10
+			factor.Description += "; Some documents appear to be very small"
+		}
+	}
+
+	return factor
+}
+
+// analyzeGeographicRisk analyzes geographic risk factors.
+func (s *FraudDetectionService) analyzeGeographicRisk(claim *models.Claim, user *models.User) FraudFactor {
+	factor := FraudFactor{
+		Factor: "geographic_risk",
+		Weight: 0.05,
+	}
+
+	// This would typically use external data sources for geographic risk
+	// For now, we'll use a simplified approach
+	factor.Score = 20 // Default moderate risk
+	factor.Description = "Geographic risk assessment (simplified)"
+	factor.Severity = "medium"
+
+	return factor
+}
+
+// analyzeBehavioralPatterns analyzes behavioral patterns for fraud indicators.
+func (s *FraudDetectionService) analyzeBehavioralPatterns(claim *models.Claim, user *models.User) FraudFactor {
+	factor := FraudFactor{
+		Factor: "behavioral_patterns",
+		Weight: 0.10,
+	}
+
+	// Check claim description length and quality
+	descLength := len(claim.Description)
+	if descLength < 50 {
+		factor.Score = 50
+		factor.Description = "Very brief claim description"
+		factor.Severity = "medium"
+	} else if descLength > 1000 {
+		factor.Score = 30
+		factor.Description = "Extremely detailed claim description"
+		factor.Severity = "medium"
+	} else {
+		factor.Score = 10
+		factor.Description = "Appropriate claim description length"
+		factor.Severity = "low"
+	}
+
+	return factor
+}
+
+// analyzePolicyHistory analyzes policy history for fraud indicators.
+func (s *FraudDetectionService) analyzePolicyHistory(claim *models.Claim, policy *models.Policy) FraudFactor {
+	factor := FraudFactor{
+		Factor: "policy_history",
+		Weight: 0.10,
+	}
+
+	// Check policy age
+	policyAge := time.Since(policy.CreatedAt).Hours() / 24 / 365 // years
+	if policyAge < 0.25 {                                        // Less than 3 months
+		factor.Score = 60
+		factor.Description = "Very new policy"
+		factor.Severity = "high"
+	} else if policyAge < 1 {
+		factor.Score = 30
+		factor.Description = "Relatively new policy"
+		factor.Severity = "medium"
+	} else {
+		factor.Score = 10
+		factor.Description = "Established policy"
+		factor.Severity = "low"
+	}
+
+	// Check if policy is close to expiration
+	daysToExpiration := policy.ExpirationDate.Sub(claim.IncidentDate).Hours() / 24
+	if daysToExpiration < 30 {
+		factor.Score += 20
+		factor.Description += "; Incident occurred near policy expiration"
+		if factor.Severity == "low" {
+			factor.Severity = "medium"
+		}
+	}
+
+	return factor
+}
+
+// calculateConfidence calculates the confidence level in the fraud score.
+func (s *FraudDetectionService) calculateConfidence(factors []FraudFactor) float64 {
+	// Confidence is based on the number of factors and their weights
+	totalWeight := 0.0
+	activeFactors := 0
+
+	for _, factor := range factors {
+		if factor.Weight > 0 {
+			totalWeight += factor.Weight
+			activeFactors++
+		}
+	}
+
+	// Base confidence on total weight and number of factors
+	weightConfidence := math.Min(totalWeight, 1.0)
+	factorConfidence := math.Min(float64(activeFactors)/8.0, 1.0) // Assuming 8 total factors
+
+	return (weightConfidence + factorConfidence) / 2.0
+}
+
+// determineRiskLevel determines the risk level based on the fraud score.
+func (s *FraudDetectionService) determineRiskLevel(score float64) string {
+	switch {
+	case score >= 80:
+		return "critical"
+	case score >= 60:
+		return "high"
+	case score >= 40:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+// requiresManualReview determines if manual review is required.
+func (s *FraudDetectionService) requiresManualReview(score float64, factors []FraudFactor) bool {
+	// Always require review for high scores
+	if score >= 70 {
+		return true
+	}
+
+	// Require review if any factor is critical
+	for _, factor := range factors {
+		if factor.Severity == "critical" {
+			return true
+		}
+	}
+
+	// Require review if multiple high-severity factors
+	highSeverityCount := 0
+	for _, factor := range factors {
+		if factor.Severity == "high" {
+			highSeverityCount++
+		}
+	}
+
+	return highSeverityCount >= 2
+}
+
+// generateRecommendations generates recommendations based on the fraud analysis.
+func (s *FraudDetectionService) generateRecommendations(score *FraudScore, factors []FraudFactor) []string {
+	recommendations := []string{}
+
+	switch score.RiskLevel {
+	case "critical":
+		recommendations = append(recommendations, "Immediate manual review required")
+		recommendations = append(recommendations, "Consider suspending claim processing")
+		recommendations = append(recommendations, "Request additional documentation")
+		recommendations = append(recommendations, "Consider involving fraud investigation team")
+
+	case "high":
+		recommendations = append(recommendations, "Manual review recommended")
+		recommendations = append(recommendations, "Request additional supporting documentation")
+		recommendations = append(recommendations, "Verify incident details with third parties")
+
+	case "medium":
+		recommendations = append(recommendations, "Enhanced verification recommended")
+		recommendations = append(recommendations, "Request additional documentation for high-risk factors")
+
+	case "low":
+		recommendations = append(recommendations, "Standard processing can proceed")
+		recommendations = append(recommendations, "Monitor for any additional risk factors")
+	}
+
+	// Add specific recommendations based on high-risk factors
+	for _, factor := range factors {
+		if factor.Severity == "high" || factor.Severity == "critical" {
+			switch factor.Factor {
+			case "claim_timing":
+				recommendations = append(recommendations, "Verify policy start date and incident timeline")
+			case "claim_amount":
+				recommendations = append(recommendations, "Obtain independent damage assessment")
+			case "user_history":
+				recommendations = append(recommendations, "Verify user identity and account history")
+			case "documentation":
+				recommendations = append(recommendations, "Request comprehensive supporting documentation")
+			}
+		}
+	}
+
+	return recommendations
+}
+
+// GetFraudScore retrieves a previously calculated fraud score.
+func (s *FraudDetectionService) GetFraudScore(ctx context.Context, claimID uuid.UUID) (*FraudScore, error) {
+	// In a real implementation, this would retrieve from a fraud analysis store
+	// For now, we'll re-analyze
+	return s.AnalyzeClaimForFraud(ctx, claimID)
+}
+
+// UpdateFraudScore updates a fraud score with new information.
+func (s *FraudDetectionService) UpdateFraudScore(ctx context.Context, claimID uuid.UUID, newScore *FraudScore) error {
+	// In a real implementation, this would update the fraud analysis store
+	// For now, we'll just validate the input
+	if newScore == nil {
+		return fmt.Errorf("fraud score cannot be nil")
+	}
+
+	if newScore.Score < 0 || newScore.Score > 100 {
+		return fmt.Errorf("fraud score must be between 0 and 100")
+	}
+
+	return nil
+}
+

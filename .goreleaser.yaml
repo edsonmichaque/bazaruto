@@ -1,0 +1,103 @@
+# GoReleaser configuration for Bazaruto
+# https://goreleaser.com/
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+builds:
+  - id: bazarutod
+    binary: bazarutod
+    main: ./cmd/bazarutod
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+
+archives:
+  - id: bazarutod
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - config.yaml
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+dockers:
+  - image_templates:
+      - "bazaruto:{{ .Version }}"
+      - "bazaruto:latest"
+    dockerfile: build/Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --platform=linux/arm64
+
+nfpms:
+  - id: bazarutod
+    package_name: bazarutod
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    description: "Bazaruto backend service for insurance product marketplace"
+    homepage: "https://github.com/edsonmichaque/bazaruto"
+    maintainer: "Bazaruto Team <team@bazaruto.com>"
+    vendor: "Bazaruto"
+    license: "MIT"
+    formats:
+      - deb
+      - rpm
+    contents:
+      - src: config.yaml
+        dst: /etc/bazaruto/config.yaml
+      - src: README.md
+        dst: /usr/share/doc/bazaruto/README.md
+      - src: LICENSE
+        dst: /usr/share/doc/bazaruto/LICENSE
+    empty_folders:
+      - /var/lib/bazaruto
+      - /var/log/bazaruto
+      - /var/cache/bazaruto
+    scripts:
+      preinstall: packaging/scripts/preinstall.sh
+      postinstall: packaging/scripts/postinstall.sh
+      preremove: packaging/scripts/preremove.sh
+      postremove: packaging/scripts/postremove.sh
+
+release:
+  github:
+    owner: edsonmichaque
+    name: bazaruto
+  draft: false
+  prerelease: auto
+  name_template: "{{ .ProjectName }} {{ .Version }}"
+  header: |
+    ## What's Changed
+
+    Full Changelog: https://github.com/edsonmichaque/bazaruto/compare/{{ .PreviousTag }}...{{ .Tag }}

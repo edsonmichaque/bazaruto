@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bazaruto
+  namespace: bazaruto
+  labels:
+    app: bazaruto
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: bazaruto
+  template:
+    metadata:
+      labels:
+        app: bazaruto
+    spec:
+      containers:
+      - name: bazaruto
+        image: bazaruto:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: BAZARUTO_DB_DSN
+          valueFrom:
+            secretKeyRef:
+              name: bazaruto-secrets
+              key: db-dsn
+        - name: BAZARUTO_REDIS_ADDR
+          value: "redis:6379"
+        - name: BAZARUTO_RATE_PROVIDER
+          value: "redis"
+        - name: BAZARUTO_OBSERVABILITY_TRACING_ENABLED
+          value: "true"
+        - name: BAZARUTO_OBSERVABILITY_TRACING_ENDPOINT
+          value: "otel-collector:4317"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/bazaruto
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: config
+        configMap:
+          name: bazaruto-config
