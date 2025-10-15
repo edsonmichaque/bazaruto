@@ -195,7 +195,7 @@ kubectl apply -f deploy/kubernetes/
 - [Configuration](docs/configuration.md) - Configuration options and business rules
 - [Deployment](docs/deployment.md) - Deployment instructions
 - [Contributing](docs/contributing.md) - Contribution guidelines
-- [Operations Guide](docs/ops-guide.md) - Production operations
+- [Operations Guide](docs/operations.md) - Production operations
 
 ## 🤝 Contributing
 
