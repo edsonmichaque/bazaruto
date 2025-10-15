@@ -109,22 +109,18 @@ func registerJobTypes(registry *job.Registry) {
 	// Email jobs
 	registry.RegisterJob(&jobs.SendEmailJob{})
 	registry.RegisterJob(&jobs.WelcomeEmailJob{})
-	registry.RegisterJob(&jobs.PasswordResetJob{})
 
 	// PDF jobs
 	registry.RegisterJob(&jobs.GenerateQuotePDFJob{})
-	registry.RegisterJob(&jobs.GeneratePolicyPDFJob{})
 
 	// Payment jobs
 	registry.RegisterJob(&jobs.ProcessPaymentJob{})
-	registry.RegisterJob(&jobs.SettleClaimPayoutJob{})
 
 	// Processing jobs
 	registry.RegisterJob(&jobs.CalculatePremiumJob{})
 	registry.RegisterJob(&jobs.FraudDetectionJob{})
 
 	// Notification jobs
-	registry.RegisterJob(&jobs.SendSMSJob{})
 	registry.RegisterJob(&jobs.PushNotificationJob{})
 }
 
